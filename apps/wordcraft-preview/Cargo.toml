@@ -1,0 +1,52 @@
+[package]
+name = "wordcraft-preview"
+description = "Read-only Word document preview for the web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "wordcraft-preview"
+path = "src/main.rs"
+
+[features]
+default = ["docbin"]
+docbin = ["dep:craft-doc-binary"]
+extra-formats = ["dep:wordcraft-formats"]
+
+[dependencies]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wordcraft-geom = { path = "../../crates/geom", features = ["slim-image"] }
+wordcraft-doc = { path = "../../crates/doc", default-features = false }
+wordcraft-fonts = { path = "../../crates/fonts", default-features = false }
+wordcraft-layout = { path = "../../crates/layout", default-features = false }
+wordcraft-render = { path = "../../crates/render", default-features = false }
+wordcraft-docx = { path = "../../crates/docx", default-features = false }
+craft-doc-binary = { workspace = true, optional = true }
+wordcraft-formats = { path = "../../crates/formats", default-features = false, optional = true }
+egui = { version = "0.37", default-features = false, features = ["bytemuck", "web_file"] }
+eframe = { workspace = true, features = ["glow", "accesskit"] }
+log = { workspace = true }
+serde_json = { workspace = true }
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+  "Blob",
+  "CustomEvent",
+  "Document",
+  "Element",
+  "Event",
+  "EventTarget",
+  "File",
+  "FileReader",
+  "HtmlCanvasElement",
+  "MediaQueryList",
+  "ProgressEvent",
+  "Window",
+] }

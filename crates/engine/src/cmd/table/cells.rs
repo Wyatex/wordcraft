@@ -1,10 +1,15 @@
+#[cfg(feature = "editing")]
 use super::layout::touch_cells;
-use super::{CmdError, CmdResult, Document, Paragraph, Path, Pos, Session, StoryRef, Table, sel_result};
+#[cfg(feature = "editing")]
+use super::{CmdError, CmdResult, sel_result};
+use super::{Document, Paragraph, Path, Pos, Session, StoryRef, Table};
 
+#[cfg(feature = "editing")]
 pub(super) fn cell(s: &Session) -> Result<(Path, usize, usize), CmdError> {
     s.sel.focus.path.cell().ok_or_else(|| CmdError::Disabled("the cursor isn't in a table".into()))
 }
 
+#[cfg(feature = "editing")]
 pub(super) fn with_table(s: &mut Session, f: impl Fn(&mut Table)) -> CmdResult {
     let (tp, _, _) = cell(s)?;
     let t = s.doc.table_mut(s.sel.focus.story, &tp)?;
@@ -38,6 +43,7 @@ pub fn selected_cells(s: &Session) -> Vec<(usize, usize)> {
     v
 }
 
+#[cfg(feature = "editing")]
 pub(super) fn with_cells(s: &mut Session, f: impl Fn(&mut wordcraft_doc::Cell)) -> CmdResult {
     let (tp, _, _) = cell(s)?;
     let cells = selected_cells(s);
@@ -51,11 +57,13 @@ pub(super) fn with_cells(s: &mut Session, f: impl Fn(&mut wordcraft_doc::Cell)) 
     sel_result(s)
 }
 
+#[cfg(feature = "editing")]
 pub(crate) fn cell_text(c: &wordcraft_doc::Cell) -> String {
     c.blocks.iter().filter_map(|b| b.as_para().map(|p| p.plain_text())).collect::<Vec<_>>().join("\n")
 }
 
 /// The language of a cell's text: that of its first paragraph with text.
+#[cfg(feature = "editing")]
 pub(super) fn cell_lang(doc: &wordcraft_doc::Document, c: &wordcraft_doc::Cell) -> Option<String> {
     c.blocks.iter().filter_map(|b| b.as_para()).find(|p| !p.plain_text().trim().is_empty()).and_then(|p| crate::cmd::para_lang(doc, p))
 }

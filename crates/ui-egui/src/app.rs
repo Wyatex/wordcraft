@@ -1,10 +1,12 @@
 use super::services::Services;
+#[cfg(feature = "full")]
 use super::state::{AutoSaveBlock, PromptSave, keeps_everything};
+#[cfg(feature = "full")]
 use super::{
-    DEFAULT_TAB, MAX_DICTIONARY, MAX_RECENT, SaveInFlight, Session, Status, Value, WordApp, applied_font, canvas, chrome, crop, dialogs, documents,
-    file_dialogs, i18n, json, panes, paste_picture, printing, push_recent_font, read_aloud, recent_fonts_from, ribbon, system_clipboard, table_pen,
-    theme, updates_ui, window_ui, windows, zotero,
+    DEFAULT_TAB, MAX_DICTIONARY, SaveInFlight, applied_font, crop, file_dialogs, paste_picture, printing, push_recent_font, read_aloud,
+    recent_fonts_from, ribbon, system_clipboard, table_pen, updates_ui, windows, zotero,
 };
+use super::{MAX_RECENT, Session, Status, Value, WordApp, canvas, chrome, dialogs, documents, i18n, json, panes, theme, window_ui};
 use craft::platform::clock::monotonic_ms;
 use craft::theme::ComponentSet;
 use craft::ui::runtime::commands::CommandInput;
@@ -14,13 +16,18 @@ use craft::ui::runtime::windows::WindowHost;
 
 pub(crate) mod command_board;
 mod commands;
+#[cfg(feature = "full")]
 mod control;
 mod files;
+#[cfg(feature = "full")]
 pub(crate) use files::Closing;
 pub(crate) mod fonts;
 mod frame;
 mod input;
+#[cfg(feature = "full")]
+#[cfg(feature = "full")]
 mod pictures;
+#[cfg(feature = "full")]
 mod prefs;
 
 #[cfg(test)]
@@ -51,39 +58,61 @@ impl WordApp {
         // What the window shows starts as a new window's.
         let window_ui::WindowUi {
             canvas,
+            #[cfg(feature = "full")]
             restrict,
+            #[cfg(feature = "full")]
             spelling_review,
             status,
+            #[cfg(feature = "full")]
             announcement,
+            #[cfg(feature = "full")]
             previews,
+            #[cfg(feature = "full")]
             change_picture_target,
+            #[cfg(feature = "full")]
             recipient_list_pending,
+            #[cfg(feature = "full")]
             ribbon_dropped,
             nav_search_focus,
             escape_free,
             status_counts,
             missing_fonts,
             export_error,
+            #[cfg(feature = "full")]
             last_autosave,
+            #[cfg(feature = "full")]
             equation_prev_tab,
+            #[cfg(feature = "full")]
             smart_art_item,
+            #[cfg(feature = "full")]
             outline_prev_tab,
+            #[cfg(feature = "full")]
             read_aloud_at,
             file_dialog,
             info_editing,
             shown_document,
+            #[cfg(feature = "full")]
             backstage_state,
             chrome,
             dialog_host,
             dialog_hooks,
+            #[cfg(feature = "full")]
             dialog_answers,
+            #[cfg(feature = "full")]
             edits,
+            #[cfg(feature = "full")]
             keytips_active,
+            #[cfg(feature = "full")]
             options_state,
+            #[cfg(feature = "full")]
             print,
+            #[cfg(feature = "full")]
             shape_variation,
+            #[cfg(feature = "full")]
             equation_symbol_set,
+            #[cfg(feature = "full")]
             md_source_visit,
+            #[cfg(feature = "full")]
             more_colors,
             tab,
             backstage,
@@ -95,7 +124,9 @@ impl WordApp {
             ui: super::prefs::Prefs { tab, backstage, backstage_page, nav_collapsed, ..super::prefs::Prefs::default() },
             services,
             host: std::sync::Arc::new(craft::host::Host::builder(super::APP).i18n(i18n::catalogs()).lang(craft::i18n::Lang::EN).build()),
+            #[cfg(feature = "full")]
             settings: None,
+            #[cfg(feature = "full")]
             settings_notices: Default::default(),
             command_catalog: None,
             command_catalog_mac: cfg!(target_os = "macos"),
@@ -103,17 +134,27 @@ impl WordApp {
             key_overrides: Default::default(),
             command_states: Default::default(),
             command_states_cache: None,
+            #[cfg(feature = "full")]
             keytip_cache: None,
             fonts_frames: 0,
             clipboard_published: false,
+            #[cfg(feature = "full")]
             printing: Default::default(),
+            #[cfg(feature = "full")]
             print_feedback_seen: None,
+            #[cfg(feature = "full")]
             print_gen: 0,
+            #[cfg(feature = "full")]
             updates_rt: updates_ui::Runtime::default(),
+            #[cfg(feature = "full")]
             font_notice_seen: Vec::new(),
+            #[cfg(feature = "full")]
             font_notices: false,
+            #[cfg(feature = "full")]
             packs_rt: Default::default(),
+            #[cfg(feature = "full")]
             control: None,
+            #[cfg(feature = "full")]
             capture_token: 0,
             native_scale: 1.0,
             auto_scale_limit: f32::INFINITY,
@@ -122,55 +163,88 @@ impl WordApp {
             frame_ms: 0.0,
             quit_requested: false,
             autosave: true,
+            show_file_tab: true,
+            show_autosave: true,
+            show_title_bar: true,
+            show_document_actions: true,
+            show_ribbon: true,
+            #[cfg(feature = "full")]
             zotero: zotero::ZoteroLink::default(),
             ctx: None,
             ime_origin: false,
             user_origin: false,
+            #[cfg(feature = "full")]
             read_aloud_error: None,
             autosave_path: None,
+            #[cfg(feature = "full")]
             saves_in_flight: Vec::new(),
             fallback_chooser: false,
             font_generation: wordcraft_fonts::FontDb::global().generation(),
             recovery_seen: false,
             no_document: None,
             parked: Default::default(),
+            #[cfg(feature = "full")]
             windows: windows::Windows::new(shown_document),
+            #[cfg(feature = "full")]
             closing: None,
+            #[cfg(feature = "full")]
             print_document: None,
             canvas,
+            #[cfg(feature = "full")]
             restrict,
+            #[cfg(feature = "full")]
             spelling_review,
             status,
+            #[cfg(feature = "full")]
             announcement,
+            #[cfg(feature = "full")]
             previews,
+            #[cfg(feature = "full")]
             change_picture_target,
+            #[cfg(feature = "full")]
             recipient_list_pending,
+            #[cfg(feature = "full")]
             ribbon_dropped,
             nav_search_focus,
             escape_free,
             status_counts,
             missing_fonts,
             export_error,
+            #[cfg(feature = "full")]
             last_autosave,
+            #[cfg(feature = "full")]
             equation_prev_tab,
+            #[cfg(feature = "full")]
             smart_art_item,
+            #[cfg(feature = "full")]
             outline_prev_tab,
+            #[cfg(feature = "full")]
             read_aloud_at,
             file_dialog,
             info_editing,
             shown_document,
+            #[cfg(feature = "full")]
             backstage_state,
             chrome,
             dialog_host,
             dialog_hooks,
+            #[cfg(feature = "full")]
             dialog_answers,
+            #[cfg(feature = "full")]
             edits,
+            #[cfg(feature = "full")]
             keytips_active,
+            #[cfg(feature = "full")]
             options_state,
+            #[cfg(feature = "full")]
             print,
+            #[cfg(feature = "full")]
             shape_variation,
+            #[cfg(feature = "full")]
             equation_symbol_set,
+            #[cfg(feature = "full")]
             md_source_visit,
+            #[cfg(feature = "full")]
             more_colors,
         }
     }
@@ -182,6 +256,7 @@ impl WordApp {
     }
 
     /// Whether saving is a download: the browser keeps the files, so there is no path to write to.
+    #[cfg(feature = "full")]
     pub(crate) fn browser_saves(&self) -> bool {
         self.host.files().browser_saves()
     }
@@ -192,11 +267,14 @@ impl WordApp {
     pub fn root_env(&self) -> RootEnv {
         let lang = i18n::Lang::from_pref(&self.ui.language);
         let direction = if lang.rtl() { craft::i18n::Direction::Rtl } else { craft::i18n::Direction::Ltr };
+        #[cfg(any(windows, feature = "full"))]
         let locale = sys_locale::get_locale();
         #[cfg(windows)]
         let (ansi, oem) = craft::codepage::windows_code_pages(locale.as_deref());
-        #[cfg(not(windows))]
+        #[cfg(all(not(windows), feature = "full"))]
         let (ansi, oem) = (1252, wordcraft_engine::cmd::text::oem_code_page(locale.as_deref()));
+        #[cfg(all(not(windows), not(feature = "full")))]
+        let (ansi, oem) = (1252, 437);
         let line = self.ui.scroll_speed.wheel_factor();
         #[cfg(not(target_arch = "wasm32"))]
         let point = self.ui.touchpad_scroll_speed.touchpad_factor();
@@ -254,11 +332,22 @@ impl WordApp {
                 self.ui.interface_size = theme::migrate_legacy_interface_size(old, native);
             }
             // Auto never draws larger than the smallest screen a window is on allows (#4030).
-            let host = WindowHost::of(&ctx);
-            self.auto_scale_limit = theme::auto_scale_limit_over(
-                self.windows.viewports(&ctx).into_iter().filter_map(|v| host.monitor_of(v)).map(|m| (m.size_px, m.scale)),
-                self.native_scale,
-            );
+            #[cfg(feature = "full")]
+            {
+                let host = WindowHost::of(&ctx);
+                self.auto_scale_limit = theme::auto_scale_limit_over(
+                    self.windows.viewports(&ctx).into_iter().filter_map(|v| host.monitor_of(v)).map(|m| (m.size_px, m.scale)),
+                    self.native_scale,
+                );
+            }
+            #[cfg(not(feature = "full"))]
+            {
+                let host = WindowHost::of(&ctx);
+                let _ = WindowHost::of(&ctx);
+                if let Some(m) = host.monitor_of(ctx.viewport_id()) {
+                    self.auto_scale_limit = theme::auto_scale_limit_over(std::iter::once((m.size_px, m.scale)), self.native_scale);
+                }
+            }
         }
         self.fonts_frames = self.fonts_frames.saturating_add(1).min(2);
         let lang = i18n::Lang::from_pref(&self.ui.language);
@@ -306,6 +395,7 @@ impl WordApp {
     }
 
     /// Terminal feedback also reaches the normal window when printing starts through control.
+    #[cfg(feature = "full")]
     pub fn poll_printing(&mut self, ctx: &egui::Context) {
         self.printing.poll(ctx);
         self.print_feedback();
@@ -317,8 +407,11 @@ impl WordApp {
         if self.ctx.is_none() {
             self.ctx = Some(ctx.clone());
         }
-        updates_ui::tick(self, ctx);
-        crate::language_packs::tick(self);
+        #[cfg(feature = "full")]
+        {
+            updates_ui::tick(self, ctx);
+            crate::language_packs::tick(self);
+        }
         // PDFs and prints show a page reference or a REF to a missing bookmark in the
         // interface's language, as Word prints them in its own.
         wordcraft_engine::set_bookmark_error(i18n::tr(lang, "Error! Bookmark not defined."));
@@ -339,44 +432,55 @@ impl WordApp {
             self.applied_editing = Some((lang, editing));
         }
         self.settle_saves();
-        let native = self.windows.native();
-        if native {
-            self.printing.poll(ctx);
-        } else {
-            self.poll_printing(ctx);
+        #[cfg(feature = "full")]
+        {
+            let native = self.windows.native();
+            if native {
+                self.printing.poll(ctx);
+            } else {
+                self.poll_printing(ctx);
+            }
         }
         // The active window's own work; with native windows each window does it again as it
         // draws, for itself.
         self.window_work(ctx);
         self.drain_inbox();
+        #[cfg(feature = "full")]
         self.paste_arrived(ctx);
         // Focus hides the title bar's search box: a search left open there has no box to show it, and would keep
         // Escape from leaving Focus (#5398).
-        if self.chrome.search && matches!(crate::chrome::Screen::of(&self.session.view), crate::chrome::Screen::Focus) {
-            self.chrome.search = false;
+        #[cfg(feature = "full")]
+        {
+            if self.chrome.search && matches!(crate::chrome::Screen::of(&self.session.view), crate::chrome::Screen::Focus) {
+                self.chrome.search = false;
+            }
+            self.pump_close_prompt();
+            self.control_logic(ctx);
         }
-        self.pump_close_prompt();
-        self.control_logic(ctx);
         self.watch_fonts(ctx);
         // A script, an agent or a later result may have made another document the active one.
         self.sync_document();
-        let document = self.session.document_id();
-        self.session.recovery_tick();
-        if self.session.document_id() != document {
-            self.ui.backstage = false;
-            self.sync_document();
-        }
-        if !self.recovery_seen && self.session.recovery_ready() {
-            self.recovery_seen = true;
-            if !self.session.recovery_documents().is_empty() && !self.session.dirty {
-                self.ui.backstage = true;
-                self.ui.backstage_page = "recover".into();
+        #[cfg(feature = "full")]
+        {
+            let document = self.session.document_id();
+            self.session.recovery_tick();
+            if self.session.document_id() != document {
+                self.ui.backstage = false;
+                self.sync_document();
+            }
+            if !self.recovery_seen && self.session.recovery_ready() {
+                self.recovery_seen = true;
+                if !self.session.recovery_documents().is_empty() && !self.session.dirty {
+                    self.ui.backstage = true;
+                    self.ui.backstage_page = "recover".into();
+                }
+            }
+            if let Some(wait) = self.session.recovery_wait() {
+                ctx.request_repaint_after(wait);
             }
         }
-        if let Some(wait) = self.session.recovery_wait() {
-            ctx.request_repaint_after(wait);
-        }
         self.report_dirty();
+        #[cfg(feature = "full")]
         self.save_prefs_step(ctx);
     }
 
@@ -384,16 +488,19 @@ impl WordApp {
     /// Read Aloud, its file dialog, AutoSave of its document. Runs in [`WordApp::logic`] for the
     /// active window and, with native windows, as each window draws.
     pub(crate) fn window_work(&mut self, ctx: &egui::Context) {
-        crate::windows::arrange::poll(self, ctx);
-        if self.windows.native() {
-            let doc = self.session.document_id();
-            if self.print_document.is_none_or(|d| d == doc || !self.session.is_open(d)) {
-                self.print_feedback();
+        #[cfg(feature = "full")]
+        {
+            crate::windows::arrange::poll(self, ctx);
+            if self.windows.native() {
+                let doc = self.session.document_id();
+                if self.print_document.is_none_or(|d| d == doc || !self.session.is_open(d)) {
+                    self.print_feedback();
+                }
             }
+            zotero::poll(self, ctx);
+            read_aloud::poll(self, ctx);
+            self.clear_stale_change_picture();
         }
-        zotero::poll(self, ctx);
-        read_aloud::poll(self, ctx);
-        self.clear_stale_change_picture();
         let _ = self.poll_file_dialog();
         self.autosave_tick(monotonic_ms());
         if self.autosaves() && self.session.dirty {
@@ -404,28 +511,37 @@ impl WordApp {
     /// Lay out the windows: on the desktop each open document's in its own native window
     /// ([`windows`]), on the web the one window.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
+        #[cfg(feature = "full")]
         if self.windows.native() {
             self.windows_ui(ui);
-        } else {
-            self.window_ui(ui);
+            return;
         }
+        self.window_ui(ui);
     }
 
     /// Lay out the drawn window. A command that brings another window's state in (New, Open,
     /// Switch Windows) ends this window's drawing for the frame: the rest would be the other
     /// window's.
     pub(crate) fn window_ui(&mut self, ui: &mut egui::Ui) {
+        #[cfg(feature = "full")]
         let window = self.windows.shown();
+        #[cfg(feature = "full")]
         let moved = |app: &WordApp| app.windows.shown() != window;
+        #[cfg(not(feature = "full"))]
+        let moved = |_app: &WordApp| false;
         let t0 = monotonic_ms();
         let ctx = ui.ctx().clone();
+        #[cfg(feature = "full")]
+        let extra_free = !self.keytips_active && !crate::chrome::search::is_open(self);
+        #[cfg(not(feature = "full"))]
+        let extra_free = true;
         self.escape_free = self.dialog_host.is_empty()
             && !self.ui.backstage
-            && !self.keytips_active
-            && !craft::ui::runtime::overlay::any_open(&ctx, craft::ui::runtime::overlay::OpenFilter::Keys)
-            && !crate::chrome::search::is_open(self);
+            && extra_free
+            && !craft::ui::runtime::overlay::any_open(&ctx, craft::ui::runtime::overlay::OpenFilter::Keys);
         // A failed Recent open, or a failed Save As, is news only until File closes (#2938).
         if !self.ui.backstage {
+            #[cfg(feature = "full")]
             self.backstage_state.clear_errors();
             self.export_error.clear();
         }
@@ -443,6 +559,41 @@ impl WordApp {
             self.report_dirty();
         }
         // The synthetic step this frame took is done even when drawing ended early.
+        #[cfg(feature = "full")]
         self.control_ui(&ctx);
+    }
+}
+
+#[cfg(not(feature = "full"))]
+impl WordApp {
+    pub fn quit(&mut self) -> bool {
+        self.quit_requested = true;
+        true
+    }
+
+    pub(crate) fn window_id(&self, name: &'static str) -> egui::Id {
+        egui::Id::unique(name)
+    }
+
+    pub(crate) fn window_title(&self) -> String {
+        if !self.has_document() {
+            return "WordCraft".into();
+        }
+        self.session.documents().into_iter().find(|d| d.active).map_or_else(|| "WordCraft".into(), |d| documents::display_title(&d))
+    }
+
+    pub(crate) fn screen_mode(&self) -> craft::ui::shell::ScreenMode {
+        if self.session.view.focus_mode {
+            craft::ui::shell::ScreenMode::Focus
+        } else if self.session.view.full_screen {
+            craft::ui::shell::ScreenMode::FullScreen
+        } else {
+            craft::ui::shell::ScreenMode::Standard
+        }
+    }
+
+    pub(crate) fn follow_screen_mode(&mut self, mode: craft::ui::shell::ScreenMode) {
+        self.session.view.focus_mode = mode == craft::ui::shell::ScreenMode::Focus;
+        self.session.view.full_screen = mode == craft::ui::shell::ScreenMode::FullScreen;
     }
 }

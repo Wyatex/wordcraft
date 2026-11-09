@@ -63,6 +63,7 @@ pub struct Prefs {
     pub ignore_internet: bool,
     /// AutoCorrect Options: replacements, capitalization and AutoFormat As You Type (per user, as
     /// in Word). A damaged saved value reads as the defaults.
+    #[cfg(feature = "editing")]
     #[serde(deserialize_with = "crate::cmd::tools::lenient_autocorrect")]
     pub autocorrect: crate::cmd::tools::AutoCorrectPrefs,
 }
@@ -92,6 +93,7 @@ impl Default for Prefs {
             ignore_internet: true,
             detect_language: true,
             default_language: None,
+            #[cfg(feature = "editing")]
             autocorrect: Default::default(),
         }
     }
@@ -99,6 +101,7 @@ impl Default for Prefs {
 
 impl Prefs {
     /// What the spelling check skips.
+    #[cfg(feature = "proofing")]
     pub fn spelling(&self) -> wordcraft_proof::Options {
         wordcraft_proof::Options {
             ignore_uppercase: self.ignore_uppercase,
@@ -111,7 +114,14 @@ impl Prefs {
 /// Ignore malformed saved language tags without discarding the other preferences.
 fn lenient_default_language<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
     let value = serde_json::Value::deserialize(d)?;
-    Ok(value.as_str().and_then(wordcraft_proof::lang::normalize_tag))
+    #[cfg(feature = "proofing")]
+    {
+        Ok(value.as_str().and_then(wordcraft_proof::lang::normalize_tag))
+    }
+    #[cfg(not(feature = "proofing"))]
+    {
+        Ok(value.as_str().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string))
+    }
 }
 
 fn lenient_paper_color<'de, D: serde::Deserializer<'de>>(d: D) -> Result<crate::cmd::view::PaperColor, D::Error> {

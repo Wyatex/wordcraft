@@ -27,85 +27,136 @@ macro_rules! tl {
 }
 
 pub mod a11y;
+#[cfg(feature = "full")]
 pub mod a11y_pane;
+#[cfg(feature = "full")]
 pub mod backstage;
 pub mod canvas;
 pub mod caret_glide;
 pub mod chrome;
 // PLAN: the `colors` module line stays because `more_colors` (ribbon-w11, rb.A4) names `colors::Target`; the sheet's removal list assumed the dialog went with it.
+#[cfg(feature = "full")]
 pub mod colors;
+#[cfg(feature = "full")]
 pub mod content_controls;
+#[cfg(feature = "full")]
 pub mod control;
+#[cfg(feature = "full")]
 pub mod credits;
+#[cfg(feature = "full")]
 pub mod crop;
 pub mod dialogs;
 pub mod documents;
+#[cfg(feature = "full")]
 pub mod equation_tab;
 pub mod file_dialogs;
+#[cfg(feature = "full")]
 pub mod font_download;
+#[cfg(feature = "full")]
 pub mod format_shape;
 pub mod i18n;
 pub mod icons;
+#[cfg(feature = "full")]
 pub mod ink;
 pub mod keys;
+#[cfg(feature = "full")]
 pub mod keytips;
+#[cfg(feature = "full")]
 pub(crate) mod language_packs;
+#[cfg(feature = "full")]
 mod local_time;
+#[cfg(feature = "full")]
 pub mod md_source;
+#[cfg(feature = "full")]
 pub mod mini_toolbar;
+#[cfg(feature = "full")]
 pub mod objects;
+#[cfg(feature = "full")]
 pub mod options;
 /// The window identity of the channel this build runs as (stable or Nightly).
+#[cfg(feature = "full")]
 pub mod os_window;
 pub mod panes;
+#[cfg(feature = "full")]
 pub mod paste_picture;
 pub mod prefs;
+#[cfg(feature = "full")]
 pub mod previews;
+#[cfg(feature = "full")]
 pub mod print_page;
+#[cfg(feature = "full")]
 pub mod printing;
+#[cfg(feature = "full")]
 pub mod proofing_pane;
+#[cfg(feature = "full")]
 pub mod read_aloud;
+#[cfg(feature = "full")]
 mod restrict_pane;
+#[cfg(feature = "full")]
 pub mod ribbon;
+#[cfg(feature = "full")]
 mod save_types;
 pub mod scroll;
 pub use scroll::ScrollSpeed;
 pub mod desktop_theme; // owed by ribbon batch 2 (S-L348)
 pub mod system_clipboard;
+#[cfg(feature = "full")]
 pub mod table_mouse;
+#[cfg(feature = "full")]
 pub mod table_pen;
+#[cfg(feature = "full")]
 pub mod table_resize;
 pub mod theme;
+#[cfg(feature = "full")]
 mod undo_marks;
+#[cfg(feature = "full")]
 pub mod updates_ui;
+#[cfg(feature = "full")]
 pub mod widgets;
 pub mod window_geometry;
 mod window_ui;
+#[cfg(feature = "full")]
 mod windows;
+#[cfg(feature = "full")]
 pub mod wordart_menus;
+#[cfg(feature = "full")]
 pub mod zotero;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use wordcraft_engine::Session;
 
+#[cfg(feature = "full")]
 pub use dialogs::dialogs_bullet;
+#[cfg(feature = "full")]
 pub use dialogs::dialogs_chart;
+#[cfg(feature = "full")]
 pub use dialogs::dialogs_controls;
+#[cfg(feature = "full")]
 pub use dialogs::dialogs_insert;
+#[cfg(feature = "full")]
 pub use dialogs::dialogs_layout;
+#[cfg(feature = "full")]
 pub use dialogs::dialogs_lists;
+#[cfg(feature = "full")]
 pub use dialogs::dialogs_notes;
+#[cfg(feature = "full")]
 pub use dialogs::dialogs_para;
+#[cfg(feature = "full")]
 pub use dialogs::dialogs_refs;
+#[cfg(feature = "full")]
 pub use dialogs::dialogs_review;
+#[cfg(feature = "full")]
 pub use dialogs::dialogs_ribbon;
+#[cfg(feature = "full")]
 pub use dialogs::dialogs_smart_art;
 pub use file_dialogs::open_filters;
 
+#[cfg(feature = "full")]
 mod announce;
 mod app;
 mod services;
+#[cfg(feature = "full")]
 mod state;
 
 #[cfg(test)]
@@ -113,6 +164,7 @@ pub(crate) use app::works_without_document;
 // PLAN: assumed shell-w13 leaves `HostSaveFn` and `Inbox` out of `services` (sh.A14 removes `host_save` and `inbox`).
 pub use app::fonts::ui_fonts;
 pub use services::Services;
+#[cfg(feature = "full")]
 pub use state::{AutoSaveBlock, keeps_everything};
 
 /// A status-bar message and when it stops showing.
@@ -126,6 +178,7 @@ pub(crate) struct Status {
 }
 
 /// A save the browser's picker hasn't finished.
+#[cfg(feature = "full")]
 struct SaveInFlight {
     ticket: craft::host::PickId,
     /// The file name it saves as.
@@ -344,6 +397,7 @@ pub(crate) fn lenient_float_rect<'de, D: serde::Deserializer<'de>>(d: D) -> Resu
 
 /// `recentFonts` as saved, through [`recent_fonts_from`]: an entry that isn't a name is dropped,
 /// not the whole list.
+#[cfg(feature = "full")]
 pub(crate) fn lenient_recent_fonts<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
     let v = Value::deserialize(d)?;
     Ok(v.as_array().map(|a| recent_fonts_from(a.iter().filter_map(Value::as_str))).unwrap_or_default())
@@ -352,6 +406,7 @@ pub(crate) fn lenient_recent_fonts<'de, D: serde::Deserializer<'de>>(d: D) -> Re
 /// The family a command applies: `format.font {"name"}` (the font box, the mini toolbar, command
 /// search) or `format.set {"props": {"font"}}` (the Font dialog). It joins Recently Used Fonts
 /// once the command succeeds.
+#[cfg(feature = "full")]
 fn applied_font(id: &str, params: &Value) -> Option<String> {
     let name = match id {
         "format.font" => params.get("name"),
@@ -366,6 +421,7 @@ fn applied_font(id: &str, params: &Value) -> Option<String> {
 /// inches; it now lives in `editing.measurementUnits`, and no value there follows the region. A
 /// unit other than inches under the old key was the user's own choice, so it carries over (an
 /// inch value can't be told from the old default, so it follows the region).
+#[cfg(feature = "full")]
 pub(crate) fn migrate_units(v: &mut Value) {
     let Some(editing) = v.get_mut("editing").and_then(Value::as_object_mut) else { return };
     if editing.contains_key("measurementUnits") {
@@ -385,8 +441,10 @@ pub struct WordApp {
     /// The app's host: files, jobs, settings sections and the language, shared with the framework.
     pub(crate) host: std::sync::Arc<craft::host::Host>,
     /// The saved preferences' store, shared with the host.
+    #[cfg(feature = "full")]
     pub(crate) settings: Option<craft::settings::SharedSettings<prefs::Prefs>>,
     /// What the settings store reported at load and at each save, for the status line and the notices.
+    #[cfg(feature = "full")]
     pub(crate) settings_notices: craft::ui::notices::SettingsNoticeState,
     /// The app's commands as the keymap knows them, and the registry they were built from
     /// ([`WordApp::catalog`]).
@@ -406,50 +464,67 @@ pub struct WordApp {
     /// avoiding per-frame allocations and catalog reparsing while idle.
     pub(crate) command_states_cache: Option<app::command_board::CommandStatesCache>,
     /// Cached keytip control lists and reserved shortcut letters per registry and active ribbon tab.
+    #[cfg(feature = "full")]
     pub(crate) keytip_cache: Option<keytips::KeytipCache>,
     /// Frames drawn so far, counted to 2: the control channel's queued requests wait until the
     /// fonts are warm.
     pub(crate) fonts_frames: u8,
     /// Only a successfully published copy may reuse this window's private fragment.
     pub clipboard_published: bool,
+    #[cfg(feature = "full")]
     pub printing: printing::State,
+    #[cfg(feature = "full")]
     print_feedback_seen: Option<printing::Feedback>,
     /// Which job message is current: bumped when a job starts and whenever the message changes,
     /// so a window can tell a new result from one it already said even when the text is the same.
+    #[cfg(feature = "full")]
     print_gen: u64,
     pub canvas: canvas::CanvasState,
     /// The Restrict Editing pane (#412).
+    #[cfg(feature = "full")]
     pub(crate) restrict: restrict_pane::RestrictPane,
     /// The language-aware spelling and grammar task pane.
+    #[cfg(feature = "full")]
     pub spelling_review: Option<proofing_pane::SpellingForm>,
     /// The status bar's message, until its `until` passes.
     pub(crate) status: Option<Status>,
     /// The latest formatting shortcut announcement for the active window.
+    #[cfg(feature = "full")]
     pub(crate) announcement: Option<announce::Announcement>,
+    #[cfg(feature = "full")]
     pub previews: previews::Previews,
     /// Media key of the picture a pending Change Picture replaces (#147).
+    #[cfg(feature = "full")]
     pub change_picture_target: Option<String>,
     /// Web: a recipient list was asked for (Select Recipients › Use an Existing List…), so the
     /// next text file from the picker loads as recipients instead of opening (#240).
+    #[cfg(feature = "full")]
     pub recipient_list_pending: bool,
     /// The font database's [`generation`](wordcraft_fonts::FontDb::generation) last seen: when
     /// fonts are added or removed (by any route) the font lists and the layout are refreshed.
     font_generation: u64,
     /// Focus (#1678): the ribbon is dropped down from the Focus bar, over the page. The shell
     /// owns the flag while it draws; the app reads it back after each pass.
+    #[cfg(feature = "full")]
     pub(crate) ribbon_dropped: bool,
+    #[cfg(feature = "full")]
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) updates_rt: updates_ui::Runtime,
     /// The documents (by id) the missing-fonts download box has been considered for
     /// ([`font_download::tick`]), in every window.
+    #[cfg(feature = "full")]
     pub(crate) font_notice_seen: Vec<u64>,
     /// Whether that box comes up by itself ([`WordApp::tell_about_font_downloads`]).
+    #[cfg(feature = "full")]
     pub(crate) font_notices: bool,
     /// Language pack installs, the missing-pack bar ([`language_packs`]).
+    #[cfg(feature = "full")]
     pub(crate) packs_rt: language_packs::Runtime,
     /// The control channel's requests and replies, once a host started it.
+    #[cfg(feature = "full")]
     pub(crate) control: Option<craft::automation::control::ControlChannel>,
     /// The last screenshot token handed out; tokens start at 1.
+    #[cfg(feature = "full")]
     pub(crate) capture_token: u64,
     /// The Navigation pane's search box takes the keyboard on its next frame (Ctrl+F, #712).
     pub(crate) nav_search_focus: bool,
@@ -471,6 +546,19 @@ pub struct WordApp {
     escape_free: bool,
     pub quit_requested: bool,
     pub autosave: bool,
+    /// Hosts may hide the File tab while keeping the rest of the ribbon visible (for example,
+    /// the browser preview, whose file input is owned by its embedding page).
+    pub show_file_tab: bool,
+    /// Hosts may hide the AutoSave switch in the title bar without changing the document's
+    /// autosave policy.
+    pub show_autosave: bool,
+    /// Hosts may remove the whole drawn title bar while keeping the ribbon and status bar.
+    pub show_title_bar: bool,
+    /// Hosts may hide the document action buttons at the right of the ribbon tab strip
+    /// (Share, Editing/Reviewing and Comments) while keeping the tabs themselves visible.
+    pub show_document_actions: bool,
+    /// Hosts may hide the top ribbon tabs and group strip.
+    pub show_ribbon: bool,
     /// The document's fonts that aren't installed, for the status bar and the font box, and the
     /// layout they were read from.
     pub missing_fonts: crate::chrome::MissingFontsMemo,
@@ -478,14 +566,19 @@ pub struct WordApp {
     pub export_error: String,
     /// The document's [`StatusCounts`] and the key they were computed for; see [`WordApp::cached_status_counts`].
     pub status_counts: (u64, StatusCounts),
+    #[cfg(feature = "full")]
     last_autosave: f64,
     /// The tab shown before the Equation tab came up (restored when editing ends).
+    #[cfg(feature = "full")]
     pub(crate) equation_prev_tab: Option<String>,
     /// SmartArt Text Pane: the item last focused (Promote, Demote and Add Shape act on it).
+    #[cfg(feature = "full")]
     pub smart_art_item: Option<usize>,
     /// The tab shown before Outline view brought up the Outlining tab (restored when it closes).
+    #[cfg(feature = "full")]
     pub(crate) outline_prev_tab: Option<String>,
     /// Zotero commands in flight (`ui.zotero.*`).
+    #[cfg(feature = "full")]
     pub zotero: zotero::ZoteroLink,
     /// The egui context, once the first frame has run (background work wakes the UI with it).
     pub(crate) ctx: Option<egui::Context>,
@@ -496,15 +589,19 @@ pub struct WordApp {
     /// ([`WordApp::execute`]): only a user's command opens the dialog an engine request asks for.
     pub(crate) user_origin: bool,
     /// Read Aloud: the start of the sentence the caret was last moved to, and the last error shown.
+    #[cfg(feature = "full")]
     pub(crate) read_aloud_at: Option<wordcraft_engine::doc::Pos>,
+    #[cfg(feature = "full")]
     pub(crate) read_aloud_error: Option<String>,
     /// The file the document was last explicitly saved to in this session; AutoSave writes only
     /// there. A file that was merely opened isn't rewritten until the user saves it: saving drops
     /// whatever WordCraft can't represent (content controls, charts, macros…).
     autosave_path: Option<std::path::PathBuf>,
     /// Web: saves the browser's picker hasn't finished yet (#1315).
+    #[cfg(feature = "full")]
     saves_in_flight: Vec<SaveInFlight>,
     /// The Save Changes prompt this window is running and the command it holds back.
+    #[cfg(feature = "full")]
     pub(crate) closing: Option<app::Closing>,
     /// The file dialog the host is showing, and what its answer is for ([`file_dialogs`]).
     file_dialog: Option<file_dialogs::PendingDialog>,
@@ -527,34 +624,46 @@ pub struct WordApp {
     /// The per-document state of the open documents not shown.
     parked: std::collections::HashMap<u64, documents::Parked>,
     /// The open windows ([`windows`]).
+    #[cfg(feature = "full")]
     pub(crate) windows: windows::Windows,
     /// The document the last print job was for: its window reports how the job went.
+    #[cfg(feature = "full")]
     print_document: Option<u64>,
     /// The open state of the Quick Access Toolbar menu, the undo list, the status menus and the missing-fonts box.
     pub(crate) chrome: chrome::ChromeOpen,
     /// The File page's state.
+    #[cfg(feature = "full")]
     pub(crate) backstage_state: backstage::BackstageState,
     /// File › Options' state.
+    #[cfg(feature = "full")]
     pub(crate) options_state: craft::ui::patterns::preferences::PreferencesState,
     /// The Markdown Source pane's last visit.
+    #[cfg(feature = "full")]
     pub(crate) md_source_visit: u64,
     /// Keytips are showing (set from the keytips' output each pass).
+    #[cfg(feature = "full")]
     pub(crate) keytips_active: bool,
     /// The dialogs this window has open.
     pub dialog_host: craft::ui::dialog::DialogHost,
     /// What the window's dialogs ask of the app, by dialog.
     pub(crate) dialog_hooks: Vec<(craft::ui::dialog::DialogId, dialogs::host::DialogHooks)>,
     /// A finished child form's answer for its parent form, by parent dialog and form key; the parent's pass takes it.
+    #[cfg(feature = "full")]
     pub(crate) dialog_answers: Vec<(craft::ui::dialog::DialogId, String, serde_json::Value)>,
     /// Field gestures as undo steps ([`undo_marks`]).
+    #[cfg(feature = "full")]
     pub(crate) edits: craft::ui::edit::GestureHost<WordApp>,
     /// The Equation tab's symbol set.
+    #[cfg(feature = "full")]
     pub(crate) equation_symbol_set: usize,
     /// The gradient variation memory of Format Shape.
+    #[cfg(feature = "full")]
     pub(crate) shape_variation: Option<format_shape::Variation>,
     /// The File › Print page's state.
+    #[cfg(feature = "full")]
     pub(crate) print: print_page::PrintPage,
     /// The target of each open More Colors dialog, by its dialog key.
+    #[cfg(feature = "full")]
     pub(crate) more_colors: std::collections::HashMap<String, colors::Target>,
 }
 

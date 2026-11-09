@@ -113,7 +113,7 @@ pub(crate) fn show(app: &mut WordApp, ui: &mut Ui, body: &PageBody<'_>) {
     if app.canvas.mini_dismissed.as_ref().is_some_and(|d| *d != app.session.sel) {
         app.canvas.mini_dismissed = None;
     }
-    if !app.ui.mini_toolbar || !visible(app) {
+    if app.session.read_only() || !app.ui.mini_toolbar || !visible(app) {
         app.canvas.list_preview = None;
         if app.canvas.command_previewed.is_some() {
             ui.ctx().request_repaint();
@@ -142,7 +142,8 @@ pub(crate) fn show(app: &mut WordApp, ui: &mut Ui, body: &PageBody<'_>) {
 /// A text context menu offers formatting at a caret too. Object and equation menus keep their
 /// own controls; the standalone selection toolbar remains hidden while this popup is open.
 pub fn context_menu_visible(app: &WordApp) -> bool {
-    app.ui.mini_toolbar
+    !app.session.read_only()
+        && app.ui.mini_toolbar
         && !app.session.view.read_mode
         && app.session.math.is_none()
         && app.session.cell_range().is_none()

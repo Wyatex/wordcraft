@@ -43,12 +43,13 @@ pub struct ReadOptions<'a> {
 
 /// Read a package into WordCraft's document model.
 pub fn read(bytes: &[u8]) -> Result<wordcraft_doc::Document, DocxError> {
-    read_with(bytes, &Default::default())
+    read_with_password(bytes, None)
 }
 
 /// Read a package with a password.
 pub fn read_with_password(bytes: &[u8], password: Option<&str>) -> Result<wordcraft_doc::Document, DocxError> {
-    read_with(bytes, &ReadOptions { password, ..Default::default() })
+    let shared = craft_docx::read_with(bytes, &craft_docx::ReadOptions { password, chunks: None })?;
+    from_shared_model(shared)
 }
 
 /// Read a package with options.
@@ -74,24 +75,28 @@ pub fn read_xml(bytes: &[u8]) -> Result<wordcraft_doc::Document, DocxError> {
 }
 
 /// Write a document as `.docx`.
+#[cfg(feature = "write")]
 pub fn write(doc: &wordcraft_doc::Document) -> Result<Vec<u8>, DocxError> {
     let shared = to_shared_model(doc)?;
     craft_docx::write(&shared)
 }
 
 /// Write a document with a specific package flavor.
+#[cfg(feature = "write")]
 pub fn write_as(doc: &wordcraft_doc::Document, flavor: Flavor) -> Result<Vec<u8>, DocxError> {
     let shared = to_shared_model(doc)?;
     craft_docx::write_as(&shared, flavor)
 }
 
 /// Write a document as a Flat OPC XML file.
+#[cfg(feature = "write")]
 pub fn write_flat(doc: &wordcraft_doc::Document) -> Result<Vec<u8>, DocxError> {
     let shared = to_shared_model(doc)?;
     craft_docx::write_flat(&shared)
 }
 
 /// Write a document as Word 2003 XML.
+#[cfg(feature = "write")]
 pub fn write_wordml2003(doc: &wordcraft_doc::Document) -> Result<Vec<u8>, DocxError> {
     let shared = to_shared_model(doc)?;
     craft_docx::write_wordml2003(&shared)
@@ -110,6 +115,7 @@ pub fn chart_items(spec: &wordcraft_doc::chart::ChartSpec, theme: &[wordcraft_do
 }
 
 /// Write a chart part.
+#[cfg(feature = "write")]
 pub fn chart_xml(spec: &wordcraft_doc::chart::ChartSpec) -> Vec<u8> {
     let Ok(shared_spec) = model_bridge::convert_ref(spec) else {
         return Vec::new();

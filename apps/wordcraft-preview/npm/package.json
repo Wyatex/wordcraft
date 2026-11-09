@@ -1,0 +1,16 @@
+{
+  "name": "wordcraft-preview",
+  "version": "0.1.1",
+  "description": "Read-only WordCraft document preview for browsers",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist/**/*", "README.md", "LICENSE-MIT", "LICENSE-APACHE"],
+  "scripts": {
+    "build": "node scripts/build.js",
+    "prepare": "npm run build",
+    "test": "node -e \"console.log('No JavaScript tests')\""
+  },
+  "engines": { "node": ">=14.0.0" },
+  "license": "(MIT OR Apache-2.0)",
+  "keywords": ["wordcraft", "docx", "document", "preview", "wasm"]
+}

@@ -7,7 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "image")]
+#[cfg(any(feature = "image", feature = "slim-image"))]
 pub mod picture;
 mod region;
 pub use region::Region;

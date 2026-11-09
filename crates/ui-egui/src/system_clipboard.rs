@@ -9,13 +9,18 @@
 
 use std::sync::Arc;
 
-use craft::platform::clipboard::{HTML, RTF, Written};
+use craft::platform::clipboard::Written;
+#[cfg(feature = "full")]
+use craft::platform::clipboard::{HTML, RTF};
 // PLAN(app-hub): craft facade path of the framework's clipboard handle, and the craft-platform dependency
 use craft::ui::runtime::commands::{ClipItem, ClipboardHandle};
 use serde_json::Value;
+#[cfg(feature = "full")]
 use wordcraft_engine::cmd::paste::{MAX_PASTE_BYTES, MAX_PICTURE_BYTES};
 
-use crate::{WordApp, paste_picture};
+use crate::WordApp;
+#[cfg(feature = "full")]
+use crate::paste_picture;
 
 /// Longest side of a copied picture, in pixels.
 const MAX_SIDE: usize = 16_000;
@@ -23,22 +28,27 @@ const MAX_SIDE: usize = 16_000;
 const MAX_PIXELS: usize = 50_000_000;
 
 /// The commands that paste the clipboard.
+#[cfg(feature = "full")]
 pub(crate) fn is_paste(id: &str) -> bool {
     matches!(id, "edit.paste" | "edit.pasteText" | "edit.pasteMerge" | "edit.pasteSpecial")
 }
 
 /// Most format names an error lists.
+#[cfg(feature = "full")]
 const MAX_NAMES: usize = 6;
 /// Longest format name shown.
+#[cfg(feature = "full")]
 const MAX_NAME_CHARS: usize = 60;
 
 /// The clipboard of the app's window; `None` before the app has a context.
+#[cfg(feature = "full")]
 pub(crate) fn handle(app: &WordApp) -> Option<ClipboardHandle> {
     app.ctx.as_ref().map(ClipboardHandle::of)
 }
 
 /// The text of the `mime` flavour of the clipboard when it is there, not blank and within
 /// [`MAX_PASTE_BYTES`].
+#[cfg(feature = "full")]
 fn read_markup(clip: &ClipboardHandle, mime: &str) -> Option<String> {
     let flavor = clip.read(&[mime]).ok().flatten()?;
     if flavor.data.len() > MAX_PASTE_BYTES {
@@ -51,6 +61,7 @@ fn read_markup(clip: &ClipboardHandle, mime: &str) -> Option<String> {
 /// context-menu Paste send none), its HTML and RTF, and for Paste Special its picture. Params a
 /// caller already gave are kept. `Some` when the paste was done here instead (copied picture
 /// files, which reach us as their paths).
+#[cfg(feature = "full")]
 pub(crate) fn fill(app: &mut WordApp, id: &str, params: &mut Value) -> Option<Result<Value, String>> {
     if !is_paste(id) {
         return None;
@@ -185,7 +196,11 @@ fn copied_image(app: &WordApp) -> Option<Result<egui::ColorImage, String>> {
 
 /// Decode raster image bytes into an unpremultiplied RGBA8 image under bounded size limits.
 fn decode_image(bytes: &[u8]) -> Result<egui::ColorImage, String> {
-    if bytes.len() as u64 > paste_picture::MAX_FILE_BYTES {
+    #[cfg(feature = "full")]
+    let max_file_bytes = paste_picture::MAX_FILE_BYTES;
+    #[cfg(not(feature = "full"))]
+    let max_file_bytes = 200 * 1024 * 1024;
+    if bytes.len() as u64 > max_file_bytes {
         return Err("the picture file is larger than 200 MB".into());
     }
     let (w, h) = wordcraft_geom::picture::dimensions(bytes).ok_or_else(|| "unsupported or unreadable picture".to_string())?;
@@ -199,6 +214,7 @@ fn decode_image(bytes: &[u8]) -> Result<egui::ColorImage, String> {
 }
 
 /// Format names worth showing: not the clipboard protocol's own bookkeeping targets.
+#[cfg(feature = "full")]
 fn shown(name: &str) -> bool {
     let n = name.trim();
     !n.is_empty()
@@ -209,6 +225,7 @@ fn shown(name: &str) -> bool {
 
 /// What to say when a paste found nothing it can use: the formats on the clipboard when it lists
 /// them (#833), else that it is empty.
+#[cfg(feature = "full")]
 pub(crate) fn nothing_to_paste(app: &WordApp) -> String {
     let names: Vec<String> = handle(app).map(|h| h.formats()).unwrap_or_default();
     let mut shown_names: Vec<String> = Vec::new();
@@ -231,6 +248,7 @@ pub(crate) fn nothing_to_paste(app: &WordApp) -> String {
 }
 
 /// A paste that found the clipboard empty, explained (#833): the status bar says what is there.
+#[cfg(feature = "full")]
 pub(crate) fn explain(app: &mut WordApp, id: &str, r: Result<Value, String>) -> Result<Value, String> {
     match r {
         Err(e) if is_paste(id) && e == "the clipboard is empty" => {

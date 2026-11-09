@@ -148,6 +148,7 @@ pub fn can_encrypt(name: &str) -> bool {
 /// Open a password-protected ODT package (ODF 1.3 Part 2 §3.4). The errors for a missing or
 /// wrong password are the `.docx` reader's texts, so [`needs_password`] and [`wrong_password`]
 /// recognise them.
+#[cfg(feature = "odt")]
 fn open_encrypted_odt(bytes: &[u8], password: Option<&str>, page: &wordcraft_doc::SectionProps) -> Result<Document, String> {
     let pw = password.ok_or_else(|| format!("ODT: {}", wordcraft_docx::PASSWORD_REQUIRED))?;
     let plain = wordcraft_formats::odt::decrypt(bytes, pw).map_err(|e| match e {
@@ -165,8 +166,37 @@ fn open_encrypted_odt(bytes: &[u8], password: Option<&str>, page: &wordcraft_doc
 /// [`crate::cmd::references::refresh_date_fields`]).
 fn opened(doc: &mut Document) {
     doc.ensure_nonempty();
+    #[cfg(feature = "editing")]
     crate::cmd::references::refresh_date_fields(doc);
 }
+
+/// Minimal base64 (standard alphabet, padding optional, whitespace ignored).
+pub fn base64_decode(s: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(s.len() * 3 / 4);
+    let mut buf = 0u32;
+    let mut n = 0;
+    for c in s.bytes() {
+        let v = match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' | b'-' => 62,
+            b'/' | b'_' => 63,
+            b'=' | b' ' | b'\n' | b'\r' | b'\t' => continue,
+            _ => return None,
+        } as u32;
+        buf = (buf << 6) | v;
+        n += 6;
+        if n >= 8 {
+            n -= 8;
+            out.push((buf >> n) as u8);
+            buf &= (1 << n) - 1;
+        }
+    }
+    Some(out)
+}
+
+pub use craft_mime::transfer::base64 as base64_encode;
 
 /// Parse a document from bytes; `name` gives the format by extension.
 pub fn open_bytes(name: &str, bytes: &[u8]) -> Result<Document, String> {
@@ -233,6 +263,7 @@ fn read_bytes(name: &str, bytes: &[u8], password: Option<&str>, page: &wordcraft
         opened(&mut doc);
         return Ok((doc, true));
     }
+    #[cfg(feature = "odt")]
     if (ext == "odt" || ext == "ott") && wordcraft_formats::odt::is_encrypted(bytes) {
         let mut doc = open_encrypted_odt(bytes, password, page)?;
         opened(&mut doc);
@@ -308,7 +339,7 @@ pub(crate) fn text_width(doc: &Document) -> f32 {
 /// picture's size (as Word does), so formats whose pictures come at their pixel size (HTML,
 /// Markdown, ODT, RTF) are fitted when they are read, as Insert › Pictures does.
 pub(crate) fn fit_block_pictures(b: &mut wordcraft_doc::Block, max_w: f32) {
-    crate::cmd::paste::each_para(b, 0, &mut |p| {
+    each_para(b, 0, &mut |p| {
         let mut changed = false;
         for o in &mut p.objects {
             if let wordcraft_doc::InlineObject::Image { w, h, float, .. } = o
@@ -326,6 +357,25 @@ pub(crate) fn fit_block_pictures(b: &mut wordcraft_doc::Block, max_w: f32) {
             p.touch();
         }
     });
+}
+
+/// Every paragraph in a block, tables included (bounded depth).
+pub(crate) fn each_para(b: &mut wordcraft_doc::Block, depth: usize, f: &mut dyn FnMut(&mut wordcraft_doc::Paragraph)) {
+    if depth > 16 {
+        return;
+    }
+    match b {
+        wordcraft_doc::Block::Para(p) => f(p),
+        wordcraft_doc::Block::Table(t) => {
+            for row in &mut t.rows {
+                for cell in &mut row.cells {
+                    for cb in &mut cell.blocks {
+                        each_para(std::sync::Arc::make_mut(cb), depth + 1, f);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// [`fit_block_pictures`] for a whole document read from a file, against its own text width.
@@ -445,11 +495,13 @@ fn open_by_content(
 }
 
 /// Serialise a document; `name` gives the format by extension.
+#[cfg(feature = "write")]
 pub fn save_bytes(name: &str, doc: &Document) -> Result<Vec<u8>, String> {
     save_bytes_opts(name, doc, &ExportOptions::default())
 }
 
 /// [`save_bytes`] with export options (Print Markup).
+#[cfg(feature = "write")]
 pub fn save_bytes_opts(name: &str, doc: &Document, opts: &ExportOptions) -> Result<Vec<u8>, String> {
     let ext = ext_of(name);
     match ext.as_str() {
@@ -468,9 +520,11 @@ pub fn save_bytes_opts(name: &str, doc: &Document, opts: &ExportOptions) -> Resu
 
 /// [`save_bytes`], encrypted with `password` when there is one and the format is a Word package
 /// or OpenDocument text file (.odt, .ott); other formats are copies and are written as they are.
+#[cfg(feature = "write")]
 pub fn save_bytes_with(name: &str, doc: &Document, password: Option<&str>, opts: &ExportOptions) -> Result<Vec<u8>, String> {
     let bytes = save_bytes_opts(name, doc, opts)?;
     match password {
+        #[cfg(feature = "odt")]
         Some(pw) if matches!(ext_of(name).as_str(), "odt" | "ott") => wordcraft_formats::odt::encrypt(&bytes, pw).map_err(|e| e.to_string()),
         Some(pw) if can_encrypt(name) => wordcraft_docx::encrypt(&bytes, pw).map_err(|e| e.to_string()),
         _ => Ok(bytes),
@@ -930,12 +984,13 @@ pub fn open_path_in(path: &std::path::Path, password: Option<&str>, _region: &wo
     open_path_with(path, password)
 }
 
+#[cfg(feature = "write")]
 pub fn save_path(path: &std::path::Path, doc: &Document) -> Result<(), String> {
     save_path_with(path, doc, None, &ExportOptions::default())
 }
 
 /// [`save_path`], encrypted with `password` as [`save_bytes_with`] does.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "write", not(target_arch = "wasm32")))]
 pub fn save_path_with(path: &std::path::Path, doc: &Document, password: Option<&str>, opts: &ExportOptions) -> Result<(), String> {
     crate::file_access::check_write(&path.to_string_lossy())?;
     let bytes = save_bytes_with(&path.to_string_lossy(), doc, password, opts)?;
@@ -943,20 +998,20 @@ pub fn save_path_with(path: &std::path::Path, doc: &Document, password: Option<&
 }
 
 /// Saves a document to `path` with optional password and export options on web targets.
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(feature = "write", target_arch = "wasm32"))]
 pub fn save_path_with(path: &std::path::Path, _doc: &Document, _password: Option<&str>, _opts: &ExportOptions) -> Result<(), String> {
     Err(format!("{}: files are saved through the browser on the web", path.display()))
 }
 
 /// Write `text` to `path` as it is (a Markdown file's own text), as safely as [`save_path_with`].
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "write", not(target_arch = "wasm32")))]
 pub fn save_text_path(path: &std::path::Path, text: &str) -> Result<(), String> {
     crate::file_access::check_write(&path.to_string_lossy())?;
     safe_save::write(path, text.as_bytes()).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// Write `text` to `path` as it is (a Markdown file's own text), as safely as [`save_path_with`].
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(feature = "write", target_arch = "wasm32"))]
 pub fn save_text_path(path: &std::path::Path, _text: &str) -> Result<(), String> {
     Err(format!("{}: files are saved through the browser on the web", path.display()))
 }

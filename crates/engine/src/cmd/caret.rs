@@ -265,8 +265,12 @@ fn page(s: &mut Session, v: &Value, dir: i32) -> CmdResult {
     // Web Layout, Draft and Outline lay the document out as one long page (#5290).
     if !s.view.read_mode && matches!(s.view.mode, ViewMode::Web | ViewMode::Draft | ViewMode::Outline) {
         // A selection can end in text a collapsed outline heading hides: page from where it shows.
+        #[cfg(feature = "editing")]
         let at = if l.caret_on(&from, s.page_hint).is_none() { super::outline::shown_pos(s, &from, false) } else { None };
+        #[cfg(feature = "editing")]
         let at = at.unwrap_or_else(|| from.clone());
+        #[cfg(not(feature = "editing"))]
+        let at = from.clone();
         let Some(c) = l.caret_on(&at, s.page_hint) else { return sel_result(s) };
         let page_h = l.pages.get(c.page).map_or(0.0, |p| p.h);
         let y = (c.top + 1.0 + dir as f32 * page_step(s, &at)).min(page_h).max(0.0);

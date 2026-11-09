@@ -11,15 +11,25 @@
 use std::collections::BTreeMap;
 
 use serde_json::Value;
+#[cfg(feature = "editing")]
+use wordcraft_doc::Table;
+#[cfg(feature = "editing")]
 use wordcraft_doc::para::Anchor;
+#[cfg(feature = "editing")]
 use wordcraft_doc::props::TableFloat;
-use wordcraft_doc::{Document, Path, Pos, StoryRef, Table};
+use wordcraft_doc::{Document, Path, Pos, StoryRef};
 use wordcraft_geom::{Point, Rect};
 use wordcraft_layout::{DocLayout, Placed};
 
-use super::table_resize::{self, CellBox, DrawnRow, Edge, REACH, ResizeTarget, clean_reach, span};
-use super::{sel_result, table};
-use crate::{CellRange, CmdError, CmdResult, CommandSpec, Selection, Session, p};
+#[cfg(feature = "editing")]
+use super::sel_result;
+use super::table;
+#[cfg(feature = "editing")]
+use super::table_resize::Edge;
+use super::table_resize::{self, CellBox, DrawnRow, REACH, ResizeTarget, clean_reach, span};
+#[cfg(feature = "editing")]
+use crate::Selection;
+use crate::{CellRange, CmdError, CmdResult, CommandSpec, Session, p};
 
 /// The column selection area: from this far above a table's top border (points) to this far
 /// below it.
@@ -48,12 +58,15 @@ pub fn specs() -> Vec<CommandSpec> {
                 r#"{"page": n, "x": pt, "y": pt, "toX"?: pt, "toY"?: pt, "reach"?: pt, "extend"?: bool, "anchorRow"?: n} (a click in page points, 0-based page, on a selection area of a table in the caret's story: just above a column selects the column, left of a row the row, along a cell's left edge inside it the cell, the move handle past the top-left corner (top-right in a right-to-left table) the table; with toX/toY (a drag) every column, row or cell from there to that point; the page margin beside a table (its leading side: right for a right-to-left table) is a row area too, and `extend` (Shift+click) on one takes the rows from the selected ones' anchor, or from row `anchorRow` (0-based) when given, so a drag keeps its press's anchor. `reach` (default 3) is the column borders' resize reach, which the cell areas keep clear of.)"#,
             )
             .pure(),
+        #[cfg(feature = "editing")]
         CommandSpec::new("table.insertAt", "Insert Row or Column by Clicking", "Table Layout › Rows & Columns", insert_at).params(
             r#"{"page": n, "x": pt, "y": pt, "reach"?: pt} (a click on a table's insert button: left of a row border adds a row there, above a column border a column; the new row or column is selected, as in Word)"#,
         ),
+        #[cfg(feature = "editing")]
         CommandSpec::new("table.moveDrag", "Move Table by Dragging", "Table Layout › Table", move_drag).params(
             r#"{"page": n, "x": pt, "y": pt, "toX": pt, "toY": pt, "reach"?: pt} (a drag from the move handle past a table's top-left corner (top-right in a right-to-left table): the table floats where it's dropped, the text wrapping around it; tables in the main text only)"#,
         ),
+        #[cfg(feature = "editing")]
         CommandSpec::new("table.fitColumn", "AutoFit Column by Double-Clicking", "Table Layout › Cell Size", fit_column).params(
             r#"{"page": n, "x": pt, "y": pt, "reach"?: pt} (a double-click on a column border: the column left of it fits its contents and the columns right of it keep their widths, moving with the border, so the table narrows or widens (up to the right margin), as in Word)"#,
         ),
@@ -486,6 +499,7 @@ pub fn anchor_row(s: &Session, tp: &Path, clicked: usize) -> usize {
 
 /// A cell to insert a column beside at grid line `line`: one starting there (the column goes
 /// before it) or, at the table's right edge, a row's last cell (after it). (row, cell, after)
+#[cfg(feature = "editing")]
 fn beside_line(t: &Table, line: usize) -> Option<(usize, usize, bool)> {
     t.rows.iter().enumerate().find_map(|(r, row)| {
         let mut g = row.first_grid();
@@ -502,6 +516,7 @@ fn beside_line(t: &Table, line: usize) -> Option<(usize, usize, bool)> {
     })
 }
 
+#[cfg(feature = "editing")]
 fn insert_at(s: &mut Session, v: &Value) -> CmdResult {
     let (page, x, y, reach) = point(v)?;
     let Target { spot, geom } = target(s, page, x, y, reach)?;
@@ -549,6 +564,7 @@ pub fn corner(l: &DocLayout, story: StoryRef, table: &Path) -> Option<(usize, f3
     })
 }
 
+#[cfg(feature = "editing")]
 fn move_drag(s: &mut Session, v: &Value) -> CmdResult {
     let (page, x, y, reach) = point(v)?;
     let (to_x, to_y) = (p::req_f32(v, "toX")?, p::req_f32(v, "toY")?);
@@ -593,6 +609,7 @@ fn move_drag(s: &mut Session, v: &Value) -> CmdResult {
     sel_result(s)
 }
 
+#[cfg(feature = "editing")]
 fn fit_column(s: &mut Session, v: &Value) -> CmdResult {
     let (page, x, y, reach) = point(v)?;
     let l = s.layout();
@@ -622,6 +639,7 @@ fn fit_column(s: &mut Session, v: &Value) -> CmdResult {
 
 /// Where the room right of table `target` ends on page `page` (page x): the right margin, or
 /// for a table nested in a cell the right edge of that cell's text.
+#[cfg(feature = "editing")]
 fn room_right(l: &DocLayout, doc: &Document, page: usize, target: &ResizeTarget) -> f32 {
     let margin = l.pages.get(page).map_or(target.right(), |pg| pg.body.right());
     let Some((outer, row, cell)) = target.table.cell() else { return margin };
@@ -636,5 +654,6 @@ fn room_right(l: &DocLayout, doc: &Document, page: usize, target: &ResizeTarget)
     (b.rect.right() - inset).min(margin)
 }
 
+#[cfg(feature = "editing")]
 #[cfg(test)]
 mod tests;

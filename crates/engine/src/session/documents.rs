@@ -13,7 +13,9 @@ use wordcraft_doc::props::CharProps;
 use wordcraft_doc::{Document, Pos, StoryRef};
 use wordcraft_layout::LayoutCache;
 
-use super::{ColumnBlock, FindState, LayoutSlots, MathEdit, Selection, Session, TypedWord, Undo, ViewState, Widened, doc_bib_style};
+#[cfg(feature = "math")]
+use super::MathEdit;
+use super::{ColumnBlock, FindState, LayoutSlots, Selection, Session, TypedWord, Undo, ViewState, Widened, doc_bib_style};
 use crate::CmdError;
 
 /// Document ids are unique in the process, so an id an agent or a window holds never names
@@ -47,6 +49,7 @@ pub struct DocState {
     pub(super) path: Option<PathBuf>,
     pub(super) file_name: Option<String>,
     pub(super) dirty: bool,
+    #[cfg(feature = "editing")]
     pub(super) pending_move: Option<crate::cmd::moves::PendingMove>,
     pub(super) find: FindState,
     pub(super) goal_x: Option<f32>,
@@ -61,6 +64,7 @@ pub struct DocState {
     pub(super) equation_join_next: bool,
     pub(super) ime_text_join: Option<Selection>,
     pub(super) join_anchor: bool,
+    #[cfg(feature = "editing")]
     pub(super) autocap: Option<crate::cmd::tools::AutoCap>,
     pub(super) rev: u64,
     pub(super) document_id: u64,
@@ -71,16 +75,21 @@ pub struct DocState {
     pub(super) layout: LayoutSlots,
     pub(super) typing: Option<TypedWord>,
     pub(super) originals: std::collections::HashMap<String, String>,
+    #[cfg(feature = "editing")]
     pub(super) md_source: Option<crate::cmd::md_source::MdSource>,
+    #[cfg(feature = "editing")]
     pub(super) md_file: crate::cmd::md_source::FileText,
+    #[cfg(feature = "editing")]
     pub(super) picture_looks: std::collections::HashMap<String, crate::cmd::objects::PictureLook>,
     pub(super) versions: Vec<(String, String, Document)>,
     pub(super) autosave: bool,
     pub(super) bib_style: String,
+    #[cfg(feature = "editing")]
     pub(super) merge: crate::cmd::mailings::MergeState,
+    #[cfg(feature = "math")]
     pub(super) math: Option<MathEdit>,
     pub(super) password: Option<crate::io::Password>,
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "editing", not(target_arch = "wasm32")))]
     pub(super) recovery_slot: crate::recovery::Slot,
     pub(super) also_selected: Vec<Pos>,
     pub(super) column: Option<ColumnBlock>,
@@ -104,6 +113,7 @@ impl DocState {
             path: None,
             file_name: None,
             dirty: false,
+            #[cfg(feature = "editing")]
             pending_move: None,
             find: FindState::default(),
             goal_x: None,
@@ -118,6 +128,7 @@ impl DocState {
             equation_join_next: false,
             ime_text_join: None,
             join_anchor: false,
+            #[cfg(feature = "editing")]
             autocap: None,
             rev: 1,
             document_id: next_document_id(),
@@ -128,16 +139,21 @@ impl DocState {
             layout: Default::default(),
             typing: None,
             originals: Default::default(),
+            #[cfg(feature = "editing")]
             md_source: None,
+            #[cfg(feature = "editing")]
             md_file: Default::default(),
+            #[cfg(feature = "editing")]
             picture_looks: Default::default(),
             versions: Vec::new(),
             autosave: true,
             bib_style,
+            #[cfg(feature = "editing")]
             merge: Default::default(),
+            #[cfg(feature = "math")]
             math: None,
             password: None,
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "editing", not(target_arch = "wasm32")))]
             recovery_slot: Default::default(),
             also_selected: Vec::new(),
             column: None,
@@ -193,6 +209,7 @@ fn title(path: Option<&FsPath>, file_name: Option<&str>, doc: &Document, untitle
 impl Session {
     /// Swap the active document's state with `d`'s: `d` then holds the document that was active.
     fn swap_doc(&mut self, d: &mut DocState) {
+        #[cfg(feature = "editing")]
         crate::cmd::md_source::apply(self);
         use std::mem::swap;
         // Every field is listed, so a new one doesn't build until someone decides whether each
@@ -208,7 +225,8 @@ impl Session {
             path: _,
             file_name: _,
             dirty: _,
-            pending_move: _,
+            #[cfg(feature = "editing")]
+                pending_move: _,
             find: _,
             goal_x: _,
             page_hint: _,
@@ -222,7 +240,8 @@ impl Session {
             equation_join_next: _,
             ime_text_join: _,
             join_anchor: _,
-            autocap: _,
+            #[cfg(feature = "editing")]
+                autocap: _,
             rev: _,
             document_id: _,
             untitled: _,
@@ -232,16 +251,21 @@ impl Session {
             layout: _,
             typing: _,
             originals: _,
-            md_source: _,
-            md_file: _,
-            picture_looks: _,
+            #[cfg(feature = "editing")]
+                md_source: _,
+            #[cfg(feature = "editing")]
+                md_file: _,
+            #[cfg(feature = "editing")]
+                picture_looks: _,
             versions: _,
             autosave: _,
             bib_style: _,
-            merge: _,
-            math: _,
+            #[cfg(feature = "editing")]
+                merge: _,
+            #[cfg(feature = "math")]
+                math: _,
             password: _,
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "editing", not(target_arch = "wasm32")))]
                 recovery_slot: _,
             also_selected: _,
             column: _,
@@ -251,7 +275,9 @@ impl Session {
             go_back_step: _,
             // Shared by every open document.
             // Names the document it belongs to, so it never applies to another one.
-            review_style: _,
+            #[cfg(feature = "editing")]
+                review_style: _,
+            read_only: _,
             user_dict_path: _,
             default_user_dict_path: _,
             clipboard: _,
@@ -272,19 +298,23 @@ impl Session {
             macros: _,
             building_blocks: _,
             ui_requests: _,
-            read_aloud: _,
+            #[cfg(feature = "editing")]
+                read_aloud: _,
             prefs: _,
             system_region: _,
             keymap: _,
             // Stamped with the document id and revision, so one cache serves every document.
             findings: _,
-            ribbon: _,
+            #[cfg(feature = "editing")]
+                ribbon: _,
             editing_lang: _,
-            math_latex: _,
+            #[cfg(feature = "math")]
+                math_latex: _,
             math_normal_text: _,
             last_highlight: _,
             // Keyed by document id and revision, so one cache serves every document.
-            protect_facts: _,
+            #[cfg(feature = "editing")]
+                protect_facts: _,
             // The input method talks to the window, whichever document it shows; the IME
             // context is keyed by `document_id`.
             ime_state_revision: _,
@@ -295,11 +325,12 @@ impl Session {
             pending_ime_application_change: _,
             ime_origin: _,
             // A picked Drawing Canvas member is cleared by a switch, not kept per document.
-            member: _,
+            #[cfg(feature = "editing")]
+                member: _,
             others: _,
             order: _,
             untitled_count: _,
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "editing", not(target_arch = "wasm32")))]
                 recovery: _,
         } = self;
         let DocState {
@@ -311,6 +342,7 @@ impl Session {
             path,
             file_name,
             dirty,
+            #[cfg(feature = "editing")]
             pending_move,
             find,
             goal_x,
@@ -325,6 +357,7 @@ impl Session {
             equation_join_next,
             ime_text_join,
             join_anchor,
+            #[cfg(feature = "editing")]
             autocap,
             rev,
             document_id,
@@ -335,16 +368,21 @@ impl Session {
             layout,
             typing,
             originals,
+            #[cfg(feature = "editing")]
             md_source,
+            #[cfg(feature = "editing")]
             md_file,
+            #[cfg(feature = "editing")]
             picture_looks,
             versions,
             autosave,
             bib_style,
+            #[cfg(feature = "editing")]
             merge,
+            #[cfg(feature = "math")]
             math,
             password,
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "editing", not(target_arch = "wasm32")))]
             recovery_slot,
             also_selected,
             column,
@@ -361,6 +399,7 @@ impl Session {
         swap(&mut self.path, path);
         swap(&mut self.file_name, file_name);
         swap(&mut self.dirty, dirty);
+        #[cfg(feature = "editing")]
         swap(&mut self.pending_move, pending_move);
         swap(&mut self.find, find);
         swap(&mut self.goal_x, goal_x);
@@ -375,6 +414,7 @@ impl Session {
         swap(&mut self.equation_join_next, equation_join_next);
         swap(&mut self.ime_text_join, ime_text_join);
         swap(&mut self.join_anchor, join_anchor);
+        #[cfg(feature = "editing")]
         swap(&mut self.autocap, autocap);
         swap(&mut self.rev, rev);
         swap(&mut self.document_id, document_id);
@@ -385,16 +425,21 @@ impl Session {
         swap(&mut self.layout, layout);
         swap(&mut self.typing, typing);
         swap(&mut self.originals, originals);
-        swap(&mut self.md_source, md_source);
-        swap(&mut self.md_file, md_file);
-        swap(&mut self.picture_looks, picture_looks);
+        #[cfg(feature = "editing")]
+        {
+            swap(&mut self.md_source, md_source);
+            swap(&mut self.md_file, md_file);
+            swap(&mut self.picture_looks, picture_looks);
+        }
         swap(&mut self.versions, versions);
         swap(&mut self.autosave, autosave);
         swap(&mut self.bib_style, bib_style);
+        #[cfg(feature = "editing")]
         swap(&mut self.merge, merge);
+        #[cfg(feature = "math")]
         swap(&mut self.math, math);
         swap(&mut self.password, password);
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(all(feature = "editing", not(target_arch = "wasm32")))]
         swap(&mut self.recovery_slot, recovery_slot);
         swap(&mut self.also_selected, also_selected);
         swap(&mut self.column, column);
@@ -403,7 +448,10 @@ impl Session {
         swap(&mut self.edit_marks, edit_marks);
         swap(&mut self.go_back_step, go_back_step);
         // A picked Drawing Canvas member (#2637) belongs to the document left behind.
-        self.member = None;
+        #[cfg(feature = "editing")]
+        {
+            self.member = None;
+        }
     }
 
     /// Make document `id` active without anything else a switch by the user does.
@@ -411,6 +459,7 @@ impl Session {
         if id == self.document_id {
             return Ok(());
         }
+        #[cfg(feature = "editing")]
         crate::cmd::md_source::apply(self);
         let at = self.others.iter().position(|d| d.document_id == id).ok_or_else(|| unknown(id))?;
         let mut d = self.others.swap_remove(at);
@@ -495,9 +544,14 @@ impl Session {
     /// Adds `doc` to the session and makes it active, parking the previously active document
     /// and applying any pending Markdown Source text first.
     fn add(&mut self, mut doc: Document, untitled: u32) -> u64 {
+        #[cfg(feature = "editing")]
         crate::cmd::md_source::apply(self);
         doc.ensure_nonempty();
+        #[cfg(feature = "editing")]
         let mut view = self.view.clone();
+        #[cfg(not(feature = "editing"))]
+        let mut view = self.view.clone();
+        #[cfg(feature = "editing")]
         view.outline.collapsed.clear();
         view.follow_prefs(&self.prefs);
         let mut d = DocState::new(doc, untitled, view);
@@ -511,17 +565,17 @@ impl Session {
 
     /// A closed document's recovery copy goes with it, as its unsaved changes do.
     fn forget_recovery_copy(&mut self, d: &DocState) {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(all(feature = "editing", not(target_arch = "wasm32")))]
         if let (Some(r), Some(id)) = (&mut self.recovery, &d.recovery_slot.id) {
             r.close(id.clone());
         }
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(any(not(feature = "editing"), target_arch = "wasm32"))]
         let _ = d;
     }
 
     /// What recovery reads from every open document, the active one first, with each
     /// document's slot to update. Nothing is cloned or laid out.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "editing", not(target_arch = "wasm32")))]
     pub(crate) fn recovery_docs(&mut self) -> impl Iterator<Item = crate::recovery::DocRecovery<'_>> {
         let active = crate::recovery::DocRecovery {
             id: self.document_id,
@@ -543,7 +597,7 @@ impl Session {
 
     /// Every open document's recovery slot, with whether it should have a current copy and
     /// its revision.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "editing", not(target_arch = "wasm32")))]
     pub(crate) fn recovery_slots(&self) -> impl Iterator<Item = (bool, u64, &crate::recovery::Slot)> {
         std::iter::once((self.dirty && self.password.is_none(), self.rev, &self.recovery_slot))
             .chain(self.others.iter().map(|d| (d.dirty && d.password.is_none(), d.rev, &d.recovery_slot)))
@@ -573,7 +627,11 @@ impl Session {
                 let mut doc = crate::cmd::file::normal_document(self);
                 doc.ensure_nonempty();
                 self.untitled_count = self.untitled_count.saturating_add(1);
+                #[cfg(feature = "editing")]
                 let mut view = self.view.clone();
+                #[cfg(not(feature = "editing"))]
+                let view = self.view.clone();
+                #[cfg(feature = "editing")]
                 view.outline.collapsed.clear();
                 let mut fresh = DocState::new(doc, self.untitled_count, view);
                 self.order = vec![fresh.document_id];
@@ -666,6 +724,7 @@ impl Session {
     /// Stop a Read Aloud reading of a document that isn't the active one (it highlights its
     /// sentences in the document shown).
     fn stop_reading_elsewhere(&mut self) {
+        #[cfg(feature = "editing")]
         if self.read_aloud.document.is_some_and(|d| d != self.document_id) && self.read_aloud.state() != crate::speech::State::Stopped {
             self.read_aloud.stop();
         }

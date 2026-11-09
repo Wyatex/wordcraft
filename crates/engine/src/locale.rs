@@ -48,6 +48,7 @@ pub fn set_reference_error(text: &str) {
 }
 
 /// The text [`set_reference_error`] recorded, for output's `REF` results.
+#[cfg(feature = "editing")]
 pub(crate) fn reference_error() -> Option<Arc<str>> {
     REFERENCE_ERROR.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
 }

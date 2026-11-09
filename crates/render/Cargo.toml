@@ -8,11 +8,16 @@ description = "WordCraft rasteriser: pages and thumbnails from the layout displa
 [lints]
 workspace = true
 
+[features]
+default = ["full-codecs", "all-fonts"]
+full-codecs = ["wordcraft-geom/image", "wordcraft-layout/full-codecs"]
+all-fonts = ["wordcraft-fonts/all-fonts", "wordcraft-layout/all-fonts"]
+
 [dependencies]
-wordcraft-geom = { workspace = true, features = ["image"] }
-wordcraft-doc = { workspace = true }
-wordcraft-fonts = { workspace = true }
-wordcraft-layout = { workspace = true }
+wordcraft-geom = { path = "../geom", features = ["slim-image"] }
+wordcraft-doc = { path = "../doc", default-features = false }
+wordcraft-fonts = { path = "../fonts", default-features = false }
+wordcraft-layout = { path = "../layout", default-features = false }
 craft-metafile = { workspace = true }
 vello_cpu = { workspace = true }
 image = { workspace = true }

@@ -43,6 +43,13 @@ pub(crate) fn lenient_order<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Ve
 }
 
 /// The panes open now, from the session's view flags, in the user's order.
+#[cfg(not(feature = "full"))]
+pub fn open(app: &WordApp) -> Vec<Pane> {
+    if app.session.view.nav_pane { vec![Pane::Navigation] } else { Vec::new() }
+}
+
+/// The panes open now, from the session's view flags, in the user's order.
+#[cfg(feature = "full")]
 pub fn open(app: &WordApp) -> Vec<Pane> {
     let v = &app.session.view;
     let smart_art = v.smart_art_pane && wordcraft_engine::cmd::smart_art::selected_smart_art(&app.session).is_some();

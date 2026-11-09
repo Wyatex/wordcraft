@@ -10,7 +10,9 @@ use craft::theme::variant::Variant;
 use craft::ui::bars::{Bar, BarKind};
 use craft::ui::buttons::{Button, ButtonOutput, IconButton, ToggleButton};
 use craft::ui::contract::{Bind, BodyCx, Gap, Props as _, Show as _, ShowContainer as _, TooltipSpec, Trigger};
-use craft::ui::display::{Divider, Text};
+#[cfg(feature = "full")]
+use craft::ui::display::Divider;
+use craft::ui::display::Text;
 use craft::ui::layout_components::Row;
 use craft::ui::menu::{Menu, MenuItem};
 use craft::ui::value_drag::{Slider, SliderScale};
@@ -18,7 +20,9 @@ use egui::Ui;
 use serde_json::json;
 use wordcraft_doc::{PartKind, StoryRef};
 
-use super::{dictionary_problem, status_count_text};
+#[cfg(feature = "full")]
+use super::dictionary_problem;
+use super::status_count_text;
 use crate::WordApp;
 
 /// The largest zoom `view.zoom` takes, in percent (its range in `crates/engine/src/cmd/view.rs`): the zoom button
@@ -106,7 +110,10 @@ fn readouts(app: &mut WordApp, ui: &mut Ui) -> egui::Rect {
         Text::new(tl!("Track Changes: On").to_string()).show(ui);
     }
     missing_fonts(app, ui);
-    if app.session.prefs.overtype && item(ui, tl!("Overtype").to_string(), Some(tl!("Click to switch back to inserting").to_string())).clicked() {
+    if !app.session.read_only()
+        && app.session.prefs.overtype
+        && item(ui, tl!("Overtype").to_string(), Some(tl!("Click to switch back to inserting").to_string())).clicked()
+    {
         let _ = app.run("text.overtype", json!({"value": false}));
     }
     if let Some(message) = app.status_message() {
@@ -123,13 +130,18 @@ fn count(app: &mut WordApp, ui: &mut Ui) {
     let unit = app.ui.status_count;
     let counts = app.cached_status_counts();
     // A selected picture/shape/text box isn't a text selection: show the total.
-    let text = if app.session.sel.is_collapsed() || crate::objects::selected(app).is_some() {
+    #[cfg(feature = "full")]
+    let object_selected = crate::objects::selected(app).is_some();
+    #[cfg(not(feature = "full"))]
+    let object_selected = false;
+    let text = if app.session.sel.is_collapsed() || object_selected {
         status_count_text(unit, counts.in_unit(unit), None)
     } else {
         let selected = crate::count_in_unit(&app.session.selected_text(), unit);
         status_count_text(unit, counts.in_unit(unit), Some(selected))
     };
     let out = item(ui, text, None);
+    #[cfg(feature = "full")]
     if out.clicked() {
         let _ = app.run("ui.dialog", json!({"name": "wordCount"}));
     }
@@ -145,6 +157,11 @@ fn count(app: &mut WordApp, ui: &mut Ui) {
 }
 
 /// The language at the caret; a click sets the proofing language (Review › Language).
+#[cfg(not(feature = "full"))]
+fn language(_app: &mut WordApp, _ui: &mut Ui) {}
+
+/// The language at the caret; a click sets the proofing language (Review › Language).
+#[cfg(feature = "full")]
 fn language(app: &mut WordApp, ui: &mut Ui) {
     let lang = crate::ribbon::caret_language(app);
     let missing = crate::ribbon::caret_missing_dictionary(app);
@@ -195,13 +212,16 @@ fn missing_fonts(app: &mut WordApp, ui: &mut Ui) {
         if count > SHOWN {
             MenuItem::heading(crate::i18n::tn((count - SHOWN) as u64, "…and {n} more", "…and {n} more")).show(ui);
         }
-        Divider::horizontal().show(ui);
-        if missing.iter().any(|f| f.download.is_some()) {
-            MenuItem::command(CommandRef::with_params("ui.dialog", json!({"name": "fontDownload"})))
-                .label(tl!("Get the Missing Fonts…").to_string())
-                .show(ui);
+        #[cfg(feature = "full")]
+        {
+            Divider::horizontal().show(ui);
+            if missing.iter().any(|f| f.download.is_some()) {
+                MenuItem::command(CommandRef::with_params("ui.dialog", json!({"name": "fontDownload"})))
+                    .label(tl!("Get the Missing Fonts…").to_string())
+                    .show(ui);
+            }
+            MenuItem::command(CommandRef::new("font.add")).label(tl!("Add Font…").to_string()).show(ui);
         }
-        MenuItem::command(CommandRef::new("font.add")).label(tl!("Add Font…").to_string()).show(ui);
     });
 }
 

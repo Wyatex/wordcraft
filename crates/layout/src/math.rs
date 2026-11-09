@@ -8,161 +8,44 @@
 //!
 //! Coordinates: x right from the equation's left edge, y *up* from its baseline.
 
+use wordcraft_doc::math::MathProps;
+use wordcraft_doc::props::Rgb;
+use wordcraft_doc::resolve::ResolvedChar;
+use wordcraft_fonts::FaceRef;
+
+#[cfg(feature = "math")]
 use std::sync::Arc;
 
+#[cfg(feature = "math")]
 use wordcraft_doc::math::{
-    Arg, BrkBin, BrkBinSub, ColJc, FracKind, LimLoc, MAX_DEPTH, MClass, MNode, MRun, MScr, MSty, MathProps, ScriptKind, is_integral, math_alnum,
-    parse_linear,
+    Arg, BrkBin, BrkBinSub, ColJc, FracKind, LimLoc, MAX_DEPTH, MClass, MNode, MRun, MScr, MSty, ScriptKind, is_integral, math_alnum, parse_linear,
 };
-use wordcraft_doc::props::{Rgb, TextColor};
-use wordcraft_doc::resolve::ResolvedChar;
+#[cfg(feature = "math")]
+use wordcraft_doc::props::TextColor;
+#[cfg(feature = "math")]
+use wordcraft_fonts::FontDb;
+#[cfg(feature = "math")]
 use wordcraft_fonts::math::{C, Construction, MathTable, glyph_bounds};
-use wordcraft_fonts::{FaceRef, FontDb};
 
+#[cfg(feature = "math")]
 mod bx;
+#[cfg(feature = "math")]
 mod glyphs;
+#[cfg(feature = "math")]
 mod nodes;
+#[cfg(feature = "math")]
 mod rows;
+#[cfg(feature = "math")]
 mod state;
+#[cfg(feature = "math")]
 mod structs;
 
+#[cfg(feature = "math")]
 use bx::St;
+#[cfg(feature = "math")]
 use state::Ctx;
 
-/// Something to draw.
-#[derive(Clone, Debug)]
-pub enum MItem {
-    Glyphs {
-        face: FaceRef,
-        size: f32,
-        color: Rgb,
-        synth_bold: bool,
-        synth_italic: bool,
-        /// Glyph id, x, y (baseline, up).
-        glyphs: Vec<(u32, f32, f32)>,
-        text: String,
-        /// Byte range of `text` each glyph shows (empty when `text` is: a glyph picked by id).
-        ranges: Vec<std::ops::Range<usize>>,
-    },
-    /// A filled rectangle; `y` is its bottom edge.
-    Rect {
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        color: Rgb,
-    },
-    Line {
-        x0: f32,
-        y0: f32,
-        x1: f32,
-        y1: f32,
-        width: f32,
-        color: Rgb,
-        dotted: bool,
-    },
-    /// Drawn on screen only (placeholders for empty slots, the empty-equation hint).
-    ScreenOnly(Box<MItem>),
-}
-
-impl MItem {
-    fn shift(&mut self, dx: f32, dy: f32) {
-        match self {
-            MItem::Glyphs { glyphs, .. } => {
-                for g in glyphs {
-                    g.1 += dx;
-                    g.2 += dy;
-                }
-            }
-            MItem::Rect { x, y, .. } => {
-                *x += dx;
-                *y += dy;
-            }
-            MItem::Line { x0, y0, x1, y1, .. } => {
-                *x0 += dx;
-                *x1 += dx;
-                *y0 += dy;
-                *y1 += dy;
-            }
-            MItem::ScreenOnly(i) => i.shift(dx, dy),
-        }
-    }
-}
-
-/// A caret position inside an equation, where it is drawn: `x`, the baseline `y` (up from the
-/// equation's baseline) and the caret's extent above (`a`) and below (`d`) it.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Slot {
-    pub path: Vec<(usize, usize)>,
-    pub off: usize,
-    pub x: f32,
-    pub y: f32,
-    pub a: f32,
-    pub d: f32,
-}
-
-/// A laid-out equation.
-#[derive(Clone, Debug, Default)]
-pub struct MathLayout {
-    pub width: f32,
-    /// Extent above and below the baseline, points.
-    pub ascent: f32,
-    pub descent: f32,
-    pub items: Vec<MItem>,
-    /// Every caret position, for drawing the caret and hit testing.
-    pub slots: Vec<Slot>,
-}
-
-impl MathLayout {
-    /// Where the caret at (`path`, `off`) is drawn.
-    pub fn slot(&self, path: &[(usize, usize)], off: usize) -> Option<&Slot> {
-        self.slots
-            .iter()
-            .find(|s| s.path == path && s.off == off)
-            .or_else(|| self.slots.iter().filter(|s| s.path == path).min_by_key(|s| s.off.abs_diff(off)))
-    }
-    /// The caret position nearest to (`x`, `y`) (y up from the baseline).
-    pub fn hit(&self, x: f32, y: f32) -> Option<&Slot> {
-        self.slots.iter().min_by(|a, b| slot_dist(a, x, y).total_cmp(&slot_dist(b, x, y)))
-    }
-    /// The extent of the argument at `path` (a numerator, a radicand…): left and right x, and
-    /// how far it reaches above and below the equation's baseline. Spans its caret positions,
-    /// within the equation.
-    pub fn arg_extent(&self, path: &[(usize, usize)]) -> Option<(f32, f32, f32, f32)> {
-        let mut slots = self.slots.iter().filter(|s| s.path == path);
-        let first = slots.next()?;
-        let init = (first.x, first.x, first.y + first.a, first.d - first.y);
-        let (x0, x1, up, down) = slots.fold(init, |(x0, x1, up, down), s| (x0.min(s.x), x1.max(s.x), up.max(s.y + s.a), down.max(s.d - s.y)));
-        Some((x0, x1, up.min(self.ascent), down.min(self.descent)))
-    }
-}
-
-fn slot_dist(s: &Slot, x: f32, y: f32) -> f32 {
-    let (top, bottom) = (s.y + s.a, s.y - s.d);
-    let dy = if y > top {
-        y - top
-    } else if y < bottom {
-        bottom - y
-    } else {
-        0.0
-    };
-    // Inside a slot's height, prefer the innermost (shortest) argument.
-    let h = (s.a + s.d).max(0.1);
-    (s.x - x).abs() + dy * 3.0 + if dy == 0.0 { h * 0.05 } else { 0.0 }
-}
-
-/// Numbered rows (`#`) in an equation: they advance the automatic numbering.
-pub fn auto_numbers(math: &wordcraft_doc::math::Math, display: bool) -> u32 {
-    if !display {
-        return 0;
-    }
-    match math.nodes.as_slice() {
-        [MNode::EqArr { rows }] => rows.iter().filter(|r| split_number(r).is_some()).count() as u32,
-        _ => 0,
-    }
-}
-
-/// A row's equation and number parts around its top-level `#`, and the units before the `#`.
+#[cfg(feature = "math")]
 fn split_number(row: &[MNode]) -> Option<(Arg, Arg, usize)> {
     let mut eq = Vec::new();
     let mut units = 0usize;
@@ -195,12 +78,19 @@ fn split_number(row: &[MNode]) -> Option<(Arg, Arg, usize)> {
     None
 }
 
-/// Lay out an equation set at the size and colour of `rc`. `display`: an equation on a line of
-/// its own (bigger operators, limits above and below, full-size fractions).
-/// `avail` is the width of the line (numbered display equations fill it, wider display equations
-/// wrap to it as `props` says); `counter` counts the document's automatic equation numbers so far
-/// and advances past this equation's.
-pub fn layout_equation(
+#[cfg(feature = "math")]
+fn auto_numbers_impl(math: &wordcraft_doc::math::Math, display: bool) -> u32 {
+    if !display {
+        return 0;
+    }
+    match math.nodes.as_slice() {
+        [MNode::EqArr { rows }] => rows.iter().filter(|r| split_number(r).is_some()).count() as u32,
+        _ => 0,
+    }
+}
+
+#[cfg(feature = "math")]
+fn layout_equation_impl(
     math: &wordcraft_doc::math::Math,
     linear: &str,
     rc: &ResolvedChar,
@@ -254,5 +144,169 @@ pub fn layout_equation(
     MathLayout { width: b.w.max(0.0), ascent: b.a.max(0.0), descent: b.d.max(0.0), items: b.items, slots }
 }
 
+/// Something to draw.
+#[derive(Clone, Debug)]
+pub enum MItem {
+    Glyphs {
+        face: FaceRef,
+        size: f32,
+        color: Rgb,
+        synth_bold: bool,
+        synth_italic: bool,
+        /// Glyph id, x, y (baseline, up).
+        glyphs: Vec<(u32, f32, f32)>,
+        text: String,
+        /// Byte range of `text` each glyph shows (empty when `text` is: a glyph picked by id).
+        ranges: Vec<std::ops::Range<usize>>,
+    },
+    /// A filled rectangle; `y` is its bottom edge.
+    Rect {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        color: Rgb,
+    },
+    Line {
+        x0: f32,
+        y0: f32,
+        x1: f32,
+        y1: f32,
+        width: f32,
+        color: Rgb,
+        dotted: bool,
+    },
+    /// Drawn on screen only (placeholders for empty slots, the empty-equation hint).
+    ScreenOnly(Box<MItem>),
+}
+
+#[cfg(feature = "math")]
+impl MItem {
+    fn shift(&mut self, dx: f32, dy: f32) {
+        match self {
+            MItem::Glyphs { glyphs, .. } => {
+                for g in glyphs {
+                    g.1 += dx;
+                    g.2 += dy;
+                }
+            }
+            MItem::Rect { x, y, .. } => {
+                *x += dx;
+                *y += dy;
+            }
+            MItem::Line { x0, y0, x1, y1, .. } => {
+                *x0 += dx;
+                *x1 += dx;
+                *y0 += dy;
+                *y1 += dy;
+            }
+            MItem::ScreenOnly(i) => i.shift(dx, dy),
+        }
+    }
+}
+
+/// A caret position inside an equation, where it is drawn: `x`, the baseline `y` (up from the
+/// equation's baseline) and the caret's extent above (`a`) and below (`d`) it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Slot {
+    pub path: Vec<(usize, usize)>,
+    pub off: usize,
+    pub x: f32,
+    pub y: f32,
+    pub a: f32,
+    pub d: f32,
+}
+
+/// A laid-out equation.
+#[derive(Clone, Debug, Default)]
+pub struct MathLayout {
+    pub width: f32,
+    /// Extent above and below the baseline, points.
+    pub ascent: f32,
+    pub descent: f32,
+    pub items: Vec<MItem>,
+    /// Every caret position, for drawing the caret and hit testing.
+    pub slots: Vec<Slot>,
+}
+
+#[cfg(feature = "math")]
+impl MathLayout {
+    /// Where the caret at (`path`, `off`) is drawn.
+    pub fn slot(&self, path: &[(usize, usize)], off: usize) -> Option<&Slot> {
+        self.slots
+            .iter()
+            .find(|s| s.path == path && s.off == off)
+            .or_else(|| self.slots.iter().filter(|s| s.path == path).min_by_key(|s| s.off.abs_diff(off)))
+    }
+    /// The caret position nearest to (`x`, `y`) (y up from the baseline).
+    pub fn hit(&self, x: f32, y: f32) -> Option<&Slot> {
+        self.slots.iter().min_by(|a, b| slot_dist(a, x, y).total_cmp(&slot_dist(b, x, y)))
+    }
+    /// The extent of the argument at `path` (a numerator, a radicand…): left and right x, and
+    /// how far it reaches above and below the equation's baseline. Spans its caret positions,
+    /// within the equation.
+    pub fn arg_extent(&self, path: &[(usize, usize)]) -> Option<(f32, f32, f32, f32)> {
+        let mut slots = self.slots.iter().filter(|s| s.path == path);
+        let first = slots.next()?;
+        let init = (first.x, first.x, first.y + first.a, first.d - first.y);
+        let (x0, x1, up, down) = slots.fold(init, |(x0, x1, up, down), s| (x0.min(s.x), x1.max(s.x), up.max(s.y + s.a), down.max(s.d - s.y)));
+        Some((x0, x1, up.min(self.ascent), down.min(self.descent)))
+    }
+}
+
+#[cfg(feature = "math")]
+fn slot_dist(s: &Slot, x: f32, y: f32) -> f32 {
+    let (top, bottom) = (s.y + s.a, s.y - s.d);
+    let dy = if y > top {
+        y - top
+    } else if y < bottom {
+        bottom - y
+    } else {
+        0.0
+    };
+    // Inside a slot's height, prefer the innermost (shortest) argument.
+    let h = (s.a + s.d).max(0.1);
+    (s.x - x).abs() + dy * 3.0 + if dy == 0.0 { h * 0.05 } else { 0.0 }
+}
+
+/// Numbered rows (`#`) in an equation: they advance the automatic numbering.
+pub fn auto_numbers(math: &wordcraft_doc::math::Math, display: bool) -> u32 {
+    #[cfg(feature = "math")]
+    {
+        auto_numbers_impl(math, display)
+    }
+    #[cfg(not(feature = "math"))]
+    {
+        let _ = (math, display);
+        0
+    }
+}
+
+/// Lay out an equation set at the size and colour of `rc`. `display`: an equation on a line of
+/// its own (bigger operators, limits above and below, full-size fractions).
+/// `avail` is the width of the line (numbered display equations fill it, wider display equations
+/// wrap to it as `props` says); `counter` counts the document's automatic equation numbers so far
+/// and advances past this equation's.
+pub fn layout_equation(
+    math: &wordcraft_doc::math::Math,
+    linear: &str,
+    rc: &ResolvedChar,
+    display: bool,
+    avail: f32,
+    props: &MathProps,
+    counter: &mut u32,
+) -> MathLayout {
+    #[cfg(feature = "math")]
+    {
+        layout_equation_impl(math, linear, rc, display, avail, props, counter)
+    }
+    #[cfg(not(feature = "math"))]
+    {
+        let _ = (math, linear, rc, display, avail, props, counter);
+        MathLayout::default()
+    }
+}
+
+#[cfg(feature = "math")]
 #[cfg(test)]
 mod tests;

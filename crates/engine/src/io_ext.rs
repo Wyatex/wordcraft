@@ -20,6 +20,7 @@ pub fn open(ext: &str, bytes: &[u8], page: &wordcraft_doc::SectionProps) -> Opti
                 if !odf {
                     crate::io::fit_pictures(&mut doc);
                 }
+                #[cfg(feature = "editing")]
                 draw_charts(&mut doc, odf);
                 doc
             })
@@ -30,6 +31,7 @@ pub fn open(ext: &str, bytes: &[u8], page: &wordcraft_doc::SectionProps) -> Opti
 /// Draw the charts a reader left undrawn (ODT charts come as their chart model alone): in the
 /// document's theme colours, at their size. With `odf`, scatter series are set to markers without
 /// a line first (see `markers_only_scatter`).
+#[cfg(feature = "editing")]
 pub(crate) fn draw_charts(doc: &mut Document, odf: bool) {
     use wordcraft_doc::para::InlineObject;
     /// Groups nest at most this deep here (the readers flatten deeper ones).
@@ -79,6 +81,7 @@ pub(crate) fn draw_charts(doc: &mut Document, odf: bool) {
 }
 
 /// Save to a format other than plain text / JSON.
+#[cfg(feature = "write")]
 pub fn save(ext: &str, doc: &Document, opts: &crate::io::ExportOptions) -> Option<Result<Vec<u8>, String>> {
     // .docx/.docm/.dotx/.dotm: the extension picks the package flavour Word expects.
     if let Some(flavor) = wordcraft_docx::Flavor::from_ext(ext) {
@@ -87,10 +90,15 @@ pub fn save(ext: &str, doc: &Document, opts: &crate::io::ExportOptions) -> Optio
     match ext {
         "xml" if opts.word2003 => Some(wordcraft_docx::write_wordml2003(doc).map_err(|e| e.to_string())),
         "xml" => Some(wordcraft_docx::write_flat(doc).map_err(|e| e.to_string())),
+        #[cfg(feature = "editing")]
         "png" => Some(render_png(doc, 0, 2.0, opts)),
+        #[cfg(feature = "pdf")]
         "pdf" => {
             // Output shows the fields Word fills in as it prints (see `output_fields`).
+            #[cfg(feature = "editing")]
             let out = crate::cmd::references::output_fields(doc);
+            #[cfg(not(feature = "editing"))]
+            let out: Option<Document> = None;
             let doc = out.as_ref().unwrap_or(doc);
             Some(crate::strict::export_pdf(doc, opts))
         }
@@ -101,6 +109,7 @@ pub fn save(ext: &str, doc: &Document, opts: &crate::io::ExportOptions) -> Optio
 /// How a page image is drawn: the printed page, headers and footers at full strength, tracked
 /// changes marked as Track Changes Options mark them. One place for `file.exportPng`,
 /// `file.strictReport`'s page check and a downloaded page image.
+#[cfg(feature = "editing")]
 pub(crate) fn page_image_options(opts: &crate::io::ExportOptions) -> wordcraft_render::RenderOptions {
     let mut ro = wordcraft_render::RenderOptions { display: crate::strict::png_display(), ..Default::default() };
     ro.display.revisions = opts.revisions.clone();
@@ -109,6 +118,7 @@ pub(crate) fn page_image_options(opts: &crate::io::ExportOptions) -> wordcraft_r
 
 /// Render page `page` as PNG at `scale` px/pt. With Print Markup's comments the page has its
 /// markup area with the comments in balloons (page images always show tracked changes).
+#[cfg(feature = "editing")]
 pub fn render_png(doc: &Document, page: usize, scale: f32, opts: &crate::io::ExportOptions) -> Result<Vec<u8>, String> {
     let out = crate::cmd::references::output_fields(doc);
     let doc = out.as_ref().unwrap_or(doc);
@@ -133,6 +143,7 @@ pub fn render_png(doc: &Document, page: usize, scale: f32, opts: &crate::io::Exp
     Ok(img.to_png())
 }
 
+#[cfg(feature = "editing")]
 #[cfg(test)]
 mod tests {
     use super::*;

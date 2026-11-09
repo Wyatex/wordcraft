@@ -24,6 +24,7 @@ pub struct Caret {
 
 /// An equation as [`DocLayout::equation_box`] finds it, in page coordinates: its left edge
 /// `x` and baseline `base`, the top and bottom of its line, and its layout (`math.width` wide).
+#[cfg(feature = "math")]
 #[derive(Clone, Debug)]
 pub struct EquationBox {
     pub page: usize,
@@ -1003,12 +1004,14 @@ impl DocLayout {
 
     /// Where the equation at `pos` (its U+FFFC) is drawn: page, x of its left edge and its
     /// baseline (page coordinates), and its layout.
+    #[cfg(feature = "math")]
     pub fn equation_geom(&self, pos: &Pos, page_hint: usize) -> Option<(usize, f32, f32, std::sync::Arc<crate::math::MathLayout>)> {
         self.equation_box(pos, page_hint).map(|b| (b.page, b.x, b.base, b.math))
     }
 
     /// The box around the equation at `pos` (its U+FFFC): its own width, and the height of its
     /// line (Word frames the equation the caret is in this way), in page coordinates.
+    #[cfg(feature = "math")]
     pub fn equation_box(&self, pos: &Pos, page_hint: usize) -> Option<EquationBox> {
         for (pi, it) in self.pieces(pos.story, &pos.path, page_hint) {
             // Equations in turned text aren't edited in place.
@@ -1039,6 +1042,7 @@ impl DocLayout {
     }
 
     /// The equation under (x, y) on `page` and the caret position inside it nearest the point.
+    #[cfg(feature = "math")]
     pub fn equation_hit(&self, page: usize, x: f32, y: f32, story: StoryRef) -> Option<(Pos, wordcraft_doc::math_edit::MathPos)> {
         let p = self.pages.get(page)?;
         for l in page_lines(p, story) {

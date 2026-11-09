@@ -7,7 +7,9 @@
 use wordcraft_doc::props::CharProps;
 use wordcraft_doc::{Pos, StoryRef};
 
-use super::{ColumnBlock, MathEdit, Selection, Session, TypedWord, ViewState, Widened, next_math_session};
+use super::{ColumnBlock, Selection, Session, TypedWord, ViewState, Widened};
+#[cfg(feature = "math")]
+use super::{MathEdit, next_math_session};
 
 /// One window's view of a document: its selection and caret state, and how it shows the page
 /// (zoom, view mode, panes, ruler…). Positions in it may be stale after edits made through
@@ -25,6 +27,7 @@ pub struct WindowView {
     equation_join_next: bool,
     ime_text_join: Option<Selection>,
     typing: Option<TypedWord>,
+    #[cfg(feature = "math")]
     math: Option<MathEdit>,
     also_selected: Vec<Pos>,
     column: Option<ColumnBlock>,
@@ -72,6 +75,7 @@ impl Session {
             equation_join_next: take(&mut self.equation_join_next),
             ime_text_join: self.ime_text_join.take(),
             typing: self.typing.take(),
+            #[cfg(feature = "math")]
             math: self.math.take(),
             also_selected: take(&mut self.also_selected),
             column: self.column.take(),
@@ -99,6 +103,7 @@ impl Session {
             ime_text_join: None,
             typing: None,
             // An equation editing session is an input method's owner: the new window's is its own.
+            #[cfg(feature = "math")]
             math: self.math.clone().and_then(|m| Some(MathEdit { session: next_math_session()?, ..m })),
             also_selected: self.also_selected.clone(),
             column: self.column.clone(),
@@ -128,6 +133,7 @@ impl Session {
             equation_join_next,
             ime_text_join,
             typing,
+            #[cfg(feature = "math")]
             math,
             also_selected,
             column,
@@ -145,9 +151,15 @@ impl Session {
         self.goal_x = goal_x;
         self.page_hint = page_hint;
         self.column_mode = column_mode;
-        self.math = math;
+        #[cfg(feature = "math")]
+        {
+            self.math = math;
+        }
         // A picked Drawing Canvas member (#2637) is not part of a view's saved selection.
-        self.member = None;
+        #[cfg(feature = "editing")]
+        {
+            self.member = None;
+        }
         if current {
             self.hf_return = hf_return;
             self.typing_open = typing_open;

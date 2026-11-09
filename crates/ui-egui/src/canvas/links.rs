@@ -2,6 +2,7 @@ use super::{DocLayout, Pos, WordApp};
 
 /// The simple field at or just before `pos` when it shows its code (View › Field Codes, or its
 /// own toggle): where it is.
+#[cfg(feature = "full")]
 pub(super) fn field_showing_code(app: &WordApp, pos: &wordcraft_doc::Pos) -> Option<wordcraft_doc::Pos> {
     let para = app.session.doc.para_at(pos)?;
     let width = wordcraft_doc::para::OBJ.len_utf8();
@@ -31,10 +32,18 @@ pub(super) fn link_under(app: &WordApp, layout: &DocLayout, page: usize, x: f32,
 /// The link a cross-reference field makes: `REF name \h` and `PAGEREF name \h` lead to the
 /// bookmark `name` (`#name`), as in Word; without `\h` the result is plain text (#2945).
 pub(super) fn field_link(obj: &wordcraft_doc::InlineObject) -> Option<String> {
-    let wordcraft_doc::InlineObject::Field { instr, .. } = obj else { return None };
-    let code = wordcraft_engine::cmd::references::FieldCode::parse(instr);
-    let name = code.args.first().filter(|n| !n.is_empty())?;
-    (matches!(code.name.as_str(), "REF" | "PAGEREF") && code.has('h')).then(|| format!("#{name}"))
+    #[cfg(feature = "full")]
+    {
+        let wordcraft_doc::InlineObject::Field { instr, .. } = obj else { return None };
+        let code = wordcraft_engine::cmd::references::FieldCode::parse(instr);
+        let name = code.args.first().filter(|n| !n.is_empty())?;
+        (matches!(code.name.as_str(), "REF" | "PAGEREF") && code.has('h')).then(|| format!("#{name}"))
+    }
+    #[cfg(not(feature = "full"))]
+    {
+        let _ = obj;
+        None
+    }
 }
 
 /// A link to a hidden bookmark (`#_Toc…`, `#_Ref…`): a name the program made, which nobody

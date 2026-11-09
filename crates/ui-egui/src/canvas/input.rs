@@ -8,9 +8,14 @@ use craft::pages::ui::{PageBody, PlacedPage};
 use craft::ui::canvas::{CanvasTool, ToolAction, ToolContext, ToolPath, ToolPointer};
 use craft::ui::primitives::Draw;
 
-use super::links::{field_showing_code, follow_link, is_generated_bookmark_link, link_under};
-use super::story::{enters_header_footer, in_text_box, part_kind, text_box_host};
+#[cfg(feature = "full")]
+use super::links::field_showing_code;
+use super::links::{follow_link, is_generated_bookmark_link, link_under};
+#[cfg(feature = "full")]
+use super::story::enters_header_footer;
+use super::story::{in_text_box, part_kind, text_box_host};
 use super::{CanvasState, DocLayout, PartKind, Pos, Pos2, StoryRef, WordApp, json};
+#[cfg(feature = "full")]
 use crate::objects::ObjectGesture;
 
 /// See [`CanvasState::unit_drag`].
@@ -25,6 +30,7 @@ pub(super) struct UnitDrag {
 
 /// After a whole-document selection from a press (not a line, so it can't grow): holds the press
 /// so its release isn't a caret click.
+#[cfg(feature = "full")]
 pub(crate) fn hold_document_selection(app: &mut WordApp, clicks: u8) {
     let (start, end) = app.session.sel.ordered();
     app.canvas.unit_drag = Some(UnitDrag { unit: "document", clicks, start, last: end.clone(), end });
@@ -34,6 +40,7 @@ pub(crate) fn hold_document_selection(app: &mut WordApp, clicks: u8) {
 /// The release of a press that [`hold_document_selection`] held: the hold ends. A table's selection part takes
 /// that press and its release (the page's text tool sees neither), so without this the hold would stay and the next
 /// click would be read as part of it.
+#[cfg(feature = "full")]
 pub(crate) fn release_document_selection(app: &mut WordApp) {
     if app.canvas.unit_drag.as_ref().is_some_and(|d| d.unit == "document") {
         app.canvas.unit_drag = None;
@@ -164,8 +171,11 @@ impl<'a> PageTextTool<'a> {
         let layout = &*self.layout;
         // A linked picture or shape under the pointer comes first: it lies over the text (#5267).
         let story = app.session.sel.focus.story;
-        let link = crate::objects::link_at(app, layout, self.body, pos)
-            .or_else(|| layout.hit(page, x, y, story).and_then(|at| link_under(app, layout, page, x, y, &at)))?;
+        #[cfg(feature = "full")]
+        let obj_link = crate::objects::link_at(app, layout, self.body, pos);
+        #[cfg(not(feature = "full"))]
+        let obj_link: Option<String> = None;
+        let link = obj_link.or_else(|| layout.hit(page, x, y, story).and_then(|at| link_under(app, layout, page, x, y, &at)))?;
         let target = if is_generated_bookmark_link(&link) { tl!("Current Document").to_string() } else { link };
         Some(format!("{target}\n{}", crate::i18n::fmt(tl!("{key}+Click to follow link"), &[("key", self.link_key)])))
     }
@@ -174,17 +184,28 @@ impl<'a> PageTextTool<'a> {
 impl CanvasTool for PageTextTool<'_> {
     fn press(&mut self, pointer: &ToolPointer, cx: &mut ToolContext<'_>) -> ToolAction {
         let layout = self.layout.clone();
-        let object = ObjectGesture::press(self.app, &layout, self.body, pointer, cx);
-        // A press on a Behind Text object is also a press on the text under it until it becomes a drag.
-        // PLAN: assumed `ObjectGesture::pending_behind(&self) -> bool` (canvas-w11).
-        let over_text = object.as_ref().is_some_and(ObjectGesture::pending_behind);
-        if let Some(g) = object {
-            self.app.canvas.object_gesture = Some(g);
-            if !over_text {
-                return ToolAction::Claimed;
+        #[cfg(feature = "full")]
+        let (over_text, claimed) = if !self.app.session.read_only() {
+            let object = ObjectGesture::press(self.app, &layout, self.body, pointer, cx);
+            // A press on a Behind Text object is also a press on the text under it until it becomes a drag.
+            // PLAN: assumed `ObjectGesture::pending_behind(&self) -> bool` (canvas-w11).
+            let over_text = object.as_ref().is_some_and(ObjectGesture::pending_behind);
+            if let Some(g) = object {
+                self.app.canvas.object_gesture = Some(g);
+                if !over_text {
+                    return ToolAction::Claimed;
+                }
             }
-        }
-        let ended = || if over_text { ToolAction::Claimed } else { ToolAction::Done };
+            (over_text, over_text)
+        } else {
+            (false, false)
+        };
+        #[cfg(not(feature = "full"))]
+        let (over_text, claimed) = {
+            let _ = cx;
+            (false, false)
+        };
+        let ended = || if claimed { ToolAction::Claimed } else { ToolAction::Done };
         let Some((page, x, y, clicks)) = self.pointer_at(pointer.pos, pointer.clicks) else {
             return if over_text { ToolAction::Claimed } else { ToolAction::Ignored };
         };
@@ -195,8 +216,11 @@ impl CanvasTool for PageTextTool<'_> {
         if skip_equation_or_outline(self.app, &pp) {
             return ended();
         }
-        let hf_zone = self.hf_zone(page, y);
-        let hf_enter = enters_header_footer(self.app, story, hf_zone);
+        let hf_zone = if !self.app.session.read_only() { self.hf_zone(page, y) } else { None };
+        #[cfg(feature = "full")]
+        let hf_enter = if !self.app.session.read_only() { enters_header_footer(self.app, story, hf_zone) } else { false };
+        #[cfg(not(feature = "full"))]
+        let hf_enter = false;
         handle_primary_press(self.app, &pp, mods, hf_zone, hf_enter);
         // A press in the header or footer band keeps the gesture: its release decides a double-click there
         // (`handle_completed_click` enters the header or footer), and a tool that is done gets no release.
@@ -204,11 +228,14 @@ impl CanvasTool for PageTextTool<'_> {
     }
 
     fn drag(&mut self, pointer: &ToolPointer, cx: &mut ToolContext<'_>) {
-        let layout = self.layout.clone();
-        if let Some(mut g) = self.app.canvas.object_gesture.take() {
-            g.drag(self.app, &layout, self.body, pointer, cx);
-            self.app.canvas.object_gesture = Some(g);
-            return;
+        #[cfg(feature = "full")]
+        {
+            let layout = self.layout.clone();
+            if let Some(mut g) = self.app.canvas.object_gesture.take() {
+                g.drag(self.app, &layout, self.body, pointer, cx);
+                self.app.canvas.object_gesture = Some(g);
+                return;
+            }
         }
         if !self.app.canvas.dragging {
             return;
@@ -221,6 +248,7 @@ impl CanvasTool for PageTextTool<'_> {
 
     fn release(&mut self, pointer: &ToolPointer, cx: &mut ToolContext<'_>) {
         let layout = self.layout.clone();
+        #[cfg(feature = "full")]
         if let Some(g) = self.app.canvas.object_gesture.take() {
             // `false`: a click on the text under a Behind Text object, finished as a text click below.
             if g.release(self.app, &layout, self.body, pointer, cx) {
@@ -230,6 +258,8 @@ impl CanvasTool for PageTextTool<'_> {
                 return;
             }
         }
+        #[cfg(not(feature = "full"))]
+        let _ = cx;
         if let Some((page, x, y, clicks)) = self.pointer_at(pointer.pos, pointer.clicks) {
             let story = self.app.session.sel.focus.story;
             let pp = PagePointer { layout: &layout, page, x, y, story, clicks };
@@ -251,6 +281,7 @@ impl CanvasTool for PageTextTool<'_> {
     }
 
     fn cancel(&mut self, _reason: CancelReason, _cx: &mut ToolContext<'_>) {
+        #[cfg(feature = "full")]
         if let Some(g) = self.app.canvas.object_gesture.take() {
             g.cancel(self.app);
         }
@@ -260,14 +291,18 @@ impl CanvasTool for PageTextTool<'_> {
     }
 
     fn paint(&self, draw: &Draw<'_>, _cx: &ToolContext<'_>) {
+        #[cfg(feature = "full")]
         if let Some(g) = self.app.canvas.object_gesture() {
             g.paint(&*self.app, draw, self.body);
         }
+        #[cfg(not(feature = "full"))]
+        let _ = draw;
     }
 
     fn cursor(&self, cx: &ToolContext<'_>) -> Cursor {
         let text = || if self.draws_ibeam { Cursor::Painted(PaintedCursor::IBeam) } else { Cursor::System(CursorIcon::Text) };
         let Some(pointer) = cx.pointer else { return text() };
+        #[cfg(feature = "full")]
         if let Some(c) = ObjectGesture::cursor(&*self.app, &self.layout, self.body, pointer.pos, pointer.mods) {
             return c;
         }
@@ -308,25 +343,30 @@ pub(crate) fn handle_secondary_selection(app: &mut WordApp, body: &PageBody<'_>,
             app.session.page_hint = page;
         }
     }
-    match layout.equation_hit(page, x, y, app.session.sel.focus.story) {
-        Some((pos, inner)) => {
-            app.session.set_selection(wordcraft_engine::Selection::caret(pos));
-            let _ = app.run("equation.edit", json!({"pos": serde_json::to_value(&inner).unwrap_or_default()}));
+    #[cfg(feature = "full")]
+    if !app.session.read_only() {
+        match layout.equation_hit(page, x, y, app.session.sel.focus.story) {
+            Some((pos, inner)) => {
+                app.session.set_selection(wordcraft_engine::Selection::caret(pos));
+                let _ = app.run("equation.edit", json!({"pos": serde_json::to_value(&inner).unwrap_or_default()}));
+                return;
+            }
+            None if app.session.math.is_some() => {
+                let _ = app.run("equation.exit", json!({}));
+            }
+            None => {}
+        }
+        if app.session.math.is_some() {
             return;
         }
-        None if app.session.math.is_some() => {
-            let _ = app.run("equation.exit", json!({}));
+        if crate::objects::select_at(app, layout, body, at) {
+            app.canvas.context_issue = None;
+            app.canvas.context_synonyms = None;
+            return;
         }
-        None => {}
     }
-    if app.session.math.is_some() {
-        return;
-    }
-    if crate::objects::select_at(app, layout, body, at) {
-        app.canvas.context_issue = None;
-        app.canvas.context_synonyms = None;
-        return;
-    }
+    #[cfg(not(feature = "full"))]
+    let _ = body;
     if !app.session.sel.is_collapsed() {
         let (from, to) = app.session.sel.ordered();
         if layout.selection_rects(&app.session.doc, &from, &to, page).into_iter().any(|(pi, r)| pi == page && r.contains(point)) {
@@ -361,40 +401,43 @@ fn handle_primary_press(
     // header, or another page's own) edits that one, with the caret at the press. Hit-tested
     // against the story being edited, the press put the caret back in it, scrolling the view
     // away from the band that was clicked.
-    if !mods.shift
-        && matches!(part_kind(app, story), Some(PartKind::Header | PartKind::Footer))
-        && let Some((_, header)) = hf_zone
-        && enters_header_footer(app, story, hf_zone)
-    {
-        app.canvas.column_drag = None;
-        app.canvas.hf_press_switched = true;
-        let id = if header { "insert.editHeader" } else { "insert.editFooter" };
-        if app.run(id, json!({ "page": page })).is_ok() {
-            let to = app.session.sel.focus.story;
-            if let Some(pos) = app.session.layout().hit(page, x, y, to) {
-                app.session.set_selection(wordcraft_engine::Selection::caret(pos));
+    #[cfg(feature = "full")]
+    if !app.session.read_only() {
+        if !mods.shift
+            && matches!(part_kind(app, story), Some(PartKind::Header | PartKind::Footer))
+            && let Some((_, header)) = hf_zone
+            && enters_header_footer(app, story, hf_zone)
+        {
+            app.canvas.column_drag = None;
+            app.canvas.hf_press_switched = true;
+            let id = if header { "insert.editHeader" } else { "insert.editFooter" };
+            if app.run(id, json!({ "page": page })).is_ok() {
+                let to = app.session.sel.focus.story;
+                if let Some(pos) = app.session.layout().hit(page, x, y, to) {
+                    app.session.set_selection(wordcraft_engine::Selection::caret(pos));
+                }
+                app.session.page_hint = page;
             }
-            app.session.page_hint = page;
+            return true;
         }
-        return true;
-    }
-    // A press in the header/footer area from the body leaves the caret where it is, as in
-    // Word (#2103): moving it to the nearest body text scrolled the view there, away from the
-    // footer the double-click was aiming at.
-    if hf_switch && !mods.shift && hf_zone.is_some() && story == StoryRef::Body && app.session.sel.focus.story == StoryRef::Body {
-        app.canvas.column_drag = None;
-        return true;
-    }
-    if !mods.shift
-        && let Some((at, inner)) = layout.equation_hit(page, x, y, story)
-    {
-        app.session.set_selection(wordcraft_engine::Selection::caret(at));
-        let _ = app.run("equation.edit", json!({"pos": serde_json::to_value(&inner).unwrap_or_default()}));
-        app.session.page_hint = page;
-        return true;
-    }
-    if app.session.math.is_some() {
-        let _ = app.run("equation.exit", json!({}));
+        // A press in the header/footer area from the body leaves the caret where it is, as in
+        // Word (#2103): moving it to the nearest body text scrolled the view there, away from the
+        // footer the double-click was aiming at.
+        if hf_switch && !mods.shift && hf_zone.is_some() && story == StoryRef::Body && app.session.sel.focus.story == StoryRef::Body {
+            app.canvas.column_drag = None;
+            return true;
+        }
+        if !mods.shift
+            && let Some((at, inner)) = layout.equation_hit(page, x, y, story)
+        {
+            app.session.set_selection(wordcraft_engine::Selection::caret(at));
+            let _ = app.run("equation.edit", json!({"pos": serde_json::to_value(&inner).unwrap_or_default()}));
+            app.session.page_hint = page;
+            return true;
+        }
+        if app.session.math.is_some() {
+            let _ = app.run("equation.exit", json!({}));
+        }
     }
     // The selection bar (the left margin beside body text, #856): a click selects the line,
     // a double-click the paragraph, a triple-click or Ctrl/⌘+click the document; Shift+click
@@ -491,7 +534,9 @@ fn pointer_story(app: &WordApp, layout: &DocLayout, page: usize, x: f32, y: f32,
 /// A release that completes a multi-click. The press already selected the word or paragraph (and a
 /// drag may have grown it). `false` for a plain click or drag.
 fn handle_completed_click(app: &mut WordApp, pointer: &PagePointer<'_>) -> bool {
-    let PagePointer { layout, page, x, y, story, clicks, .. } = *pointer;
+    let PagePointer { layout, page, x, y, story, clicks } = *pointer;
+    #[cfg(not(feature = "full"))]
+    let _ = (layout, page, x, y, story);
     let released_clicks = if clicks >= 2 { clicks } else { 0 };
     if released_clicks > 0 && app.canvas.unit_drag.as_ref().is_some_and(|d| d.clicks == released_clicks) {
         app.canvas.unit_drag = None;
@@ -503,43 +548,50 @@ fn handle_completed_click(app: &mut WordApp, pointer: &PagePointer<'_>) -> bool 
     }
     // Double-click in the header/footer area edits it (creating it when the page has none, #960);
     // double-click in the body leaves it. Print Layout only: the other views show no margins.
-    let hf_zone = if app.session.view.mode == wordcraft_layout::ViewMode::Print && !app.session.view.read_mode {
-        layout.header_footer_zone(page, y)
-    } else {
-        None
-    };
-    let hf_enter = enters_header_footer(app, story, hf_zone);
-    if clicks == 2 {
-        // Its first press already moved into the header/footer and placed the caret.
-        if app.canvas.hf_press_switched {
-            return true;
-        }
-        if let Some((_, header)) = hf_zone
-            && hf_enter
-        {
-            let id = if header { "insert.editHeader" } else { "insert.editFooter" };
-            if app.run(id, json!({ "page": page })).is_ok()
-                && let Some(pos) = app.session.layout().hit(page, x, y, app.session.sel.focus.story)
+    #[cfg(feature = "full")]
+    if !app.session.read_only() {
+        let hf_zone = if app.session.view.mode == wordcraft_layout::ViewMode::Print && !app.session.view.read_mode {
+            layout.header_footer_zone(page, y)
+        } else {
+            None
+        };
+        let hf_enter = enters_header_footer(app, story, hf_zone);
+        if clicks == 2 {
+            // Its first press already moved into the header/footer and placed the caret.
+            if app.canvas.hf_press_switched {
+                return true;
+            }
+            if let Some((_, header)) = hf_zone
+                && hf_enter
             {
-                app.session.set_selection(wordcraft_engine::Selection::caret(pos));
+                let id = if header { "insert.editHeader" } else { "insert.editFooter" };
+                if app.run(id, json!({ "page": page })).is_ok()
+                    && let Some(pos) = app.session.layout().hit(page, x, y, app.session.sel.focus.story)
+                {
+                    app.session.set_selection(wordcraft_engine::Selection::caret(pos));
+                }
+                return true;
             }
-            return true;
-        }
-        if matches!(story, StoryRef::Part(_)) && !in_text_box(app) && hf_zone.is_none() {
-            let _ = app.run("insert.closeHeader", json!({}));
-            if let Some(pos) = layout.hit(page, x, y, StoryRef::Body) {
-                app.session.set_selection(wordcraft_engine::Selection::caret(pos));
+            if matches!(story, StoryRef::Part(_)) && !in_text_box(app) && hf_zone.is_none() {
+                let _ = app.run("insert.closeHeader", json!({}));
+                if let Some(pos) = layout.hit(page, x, y, StoryRef::Body) {
+                    app.session.set_selection(wordcraft_engine::Selection::caret(pos));
+                }
+                return true;
             }
+            // Double-click a field showing its code: edit the code.
+            if let Some(pos) = layout.hit(page, x, y, story)
+                && let Some(field) = field_showing_code(app, &pos)
+            {
+                app.session.set_selection(wordcraft_engine::Selection::caret(field));
+                let _ = app.run("fields.setCode", json!({}));
+                return true;
+            }
+            let _ = app.run("select.word", json!({}));
             return true;
         }
-        // Double-click a field showing its code: edit the code.
-        if let Some(pos) = layout.hit(page, x, y, story)
-            && let Some(field) = field_showing_code(app, &pos)
-        {
-            app.session.set_selection(wordcraft_engine::Selection::caret(field));
-            let _ = app.run("fields.setCode", json!({}));
-            return true;
-        }
+    }
+    if clicks == 2 {
         let _ = app.run("select.word", json!({}));
         return true;
     }
@@ -553,8 +605,11 @@ fn handle_completed_click(app: &mut WordApp, pointer: &PagePointer<'_>) -> bool 
 /// A press the equation or the outline takes whole.
 fn skip_equation_or_outline(app: &mut WordApp, pointer: &PagePointer<'_>) -> bool {
     let PagePointer { layout, page, x, y, story, clicks } = *pointer;
+    #[cfg(not(feature = "full"))]
+    let _ = story;
     // Inside an equation, clicks place the caret in it (and double-clicks don't select words).
-    if clicks >= 2 && layout.equation_hit(page, x, y, story).is_some() {
+    #[cfg(feature = "full")]
+    if !app.session.read_only() && clicks >= 2 && layout.equation_hit(page, x, y, story).is_some() {
         return true;
     }
     // Outline view: a paragraph's symbol selects it with what is under it; a double-click

@@ -8,7 +8,11 @@ use wordcraft_doc::{Document, Pos};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum ImeCaretState {
     Body(Selection),
-    Equation { session: u64, pos: wordcraft_doc::math_edit::MathPos },
+    #[cfg(feature = "math")]
+    Equation {
+        session: u64,
+        pos: wordcraft_doc::math_edit::MathPos,
+    },
 }
 
 /// One checked allocation from a process-monotonic IME revision counter.

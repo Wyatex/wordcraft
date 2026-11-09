@@ -1,10 +1,15 @@
+#[cfg(not(feature = "full"))]
+use super::WordApp;
+#[cfg(feature = "full")]
 use super::{CommentDisplay, WordApp};
 
 /// Width of the card that floats beside a page when comments show only for the selected text (points).
+#[cfg(feature = "full")]
 pub(super) const FLOAT_WIDTH: f32 = 216.0;
 
 /// Comments show as a floating card rather than in a margin column (#1055): the option is on,
 /// balloons are shown at all, and no other markup needs the column.
+#[cfg(feature = "full")]
 pub(super) fn floating_comments(app: &WordApp) -> bool {
     let s = &app.session;
     let m = &s.prefs.markup;
@@ -13,11 +18,19 @@ pub(super) fn floating_comments(app: &WordApp) -> bool {
 
 /// The comment shown when only the selected one is: the clicked balloon, else the comment whose
 /// range holds the caret.
+#[cfg(feature = "full")]
 pub(super) fn shown_comment(app: &WordApp) -> Option<u32> {
     app.canvas.selected_balloon().or_else(|| wordcraft_engine::cmd::review::comment_range_at_caret(&app.session))
 }
 
 /// Width of the markup area beside each page for comment and revision balloons (points), or 0.
+#[cfg(not(feature = "full"))]
+pub fn markup_width(_app: &WordApp) -> f32 {
+    0.0
+}
+
+/// Width of the markup area beside each page for comment and revision balloons (points), or 0.
+#[cfg(feature = "full")]
 pub fn markup_width(app: &WordApp) -> f32 {
     // Word shows comments either in balloons (contextual) or in the Comments pane (list); Track
     // Changes Options can put every revision inline (`Session::balloons_shown`).

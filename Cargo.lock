@@ -2778,6 +2778,7 @@ dependencies = [
  "egui-wgpu",
  "egui-winit",
  "egui_glow",
+ "glow",
  "glutin",
  "glutin-winit",
  "image",
@@ -9204,6 +9205,28 @@ dependencies = [
  "wordcraft-fonts",
  "wordcraft-geom",
  "wordcraft-layout",
+]
+
+[[package]]
+name = "wordcraft-preview"
+version = "0.18.1"
+dependencies = [
+ "craft-doc-binary",
+ "eframe",
+ "egui",
+ "js-sys",
+ "log",
+ "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "wordcraft-doc",
+ "wordcraft-docx",
+ "wordcraft-fonts",
+ "wordcraft-formats",
+ "wordcraft-geom",
+ "wordcraft-layout",
+ "wordcraft-render",
 ]
 
 [[package]]

@@ -12,23 +12,31 @@ use egui::{Ui, vec2};
 
 use crate::WordApp;
 
+#[cfg(feature = "full")]
 mod comments;
 mod host;
+#[cfg(feature = "full")]
 mod inspector;
 mod nav;
+#[cfg(feature = "full")]
 mod side;
 mod state;
 
+#[cfg(feature = "full")]
 use comments::comments;
+#[cfg(feature = "full")]
 pub(crate) use comments::{commit_comment, commit_reply, flush_comment_drafts, has_comment_drafts, state_has_drafts};
 use host::Content;
 #[cfg(test)]
 pub(crate) use host::apply;
 pub(crate) use host::dock_command;
 pub use host::show;
+#[cfg(feature = "full")]
 pub(crate) use inspector::describe_props;
+#[cfg(feature = "full")]
 use inspector::inspector;
 use nav::nav;
+#[cfg(feature = "full")]
 use side::{clipboard, styles};
 pub(crate) use state::float_rect;
 #[cfg(test)]
@@ -159,17 +167,29 @@ impl Pane {
 /// Draws the body of `pane`. The pane area scrolls it, so no body brings a scroll area of its own.
 fn pane_body(app: &mut WordApp, ui: &mut Ui, pane: Pane) {
     match pane {
-        Pane::SmartArtText => crate::dialogs_smart_art::text_pane(app, ui),
         Pane::Navigation => nav(app, ui),
+        #[cfg(feature = "full")]
+        Pane::SmartArtText => crate::dialogs_smart_art::text_pane(app, ui),
+        #[cfg(feature = "full")]
         Pane::Clipboard => clipboard(app, ui),
+        #[cfg(feature = "full")]
         Pane::Styles => styles(app, ui),
+        #[cfg(feature = "full")]
         Pane::StyleInspector => inspector(app, ui),
+        #[cfg(feature = "full")]
         Pane::Accessibility => crate::a11y_pane::accessibility(app, ui),
+        #[cfg(feature = "full")]
         Pane::AltText => crate::a11y_pane::alt_text(app, ui),
+        #[cfg(feature = "full")]
         Pane::FormatShape => crate::format_shape::pane(app, ui),
+        #[cfg(feature = "full")]
         Pane::RestrictEditing => crate::restrict_pane::show(app, ui),
+        #[cfg(feature = "full")]
         Pane::Proofing => crate::proofing_pane::show(app, ui),
+        #[cfg(feature = "full")]
         Pane::Comments => comments(app, ui),
+        #[cfg(not(feature = "full"))]
+        _ => {}
     }
 }
 

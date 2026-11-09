@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WordCraft Preview</title>
+  <link data-trunk rel="rust" data-bin="wordcraft-preview" data-cargo-profile="wasm-release" data-wasm-opt="z" data-wasm-opt-params="--enable-bulk-memory --enable-sign-ext --enable-nontrapping-float-to-int --enable-mutable-globals" data-weak-refs>
+  <style>
+    :root { font: 14px system-ui, sans-serif; color-scheme: light; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #f2f3f5; }
+    #canvas_stage { position: absolute; inset: 0; }
+    #wordcraft_preview_canvas { display: block; width: 100%; height: 100%; }
+    #wordcraft_preview_canvas.modal-canvas { position: static !important; width: 100% !important; height: 100% !important; }
+    #wordcraft_preview_loading { position: fixed; inset: 0; display: grid; place-items: center; color: #555; pointer-events: none; }
+    #controls { position: fixed; z-index: 5; bottom: 34px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px; background: color-mix(in srgb, Canvas 94%, transparent); border: 1px solid #d0d4da; border-radius: 8px; box-shadow: 0 2px 12px #0002; }
+    #controls.modal-controls { position: static; left: auto; right: auto; bottom: auto; flex-shrink: 0; border: 0; border-top: 1px solid #d0d4da; border-radius: 0; box-shadow: none; background: Canvas; }
+    #controls button, #controls select, #controls input { font: inherit; }
+    #controls button, #controls select, #pageNumber, #findQuery { border: 1px solid #c8ccd2; border-radius: 5px; background: Canvas; padding: 5px 8px; }
+    #findQuery { min-width: 12rem; }
+    #status { margin-left: auto; color: #5d6470; white-space: nowrap; }
+    #error { position: fixed; z-index: 6; left: 12px; right: 12px; bottom: 12px; padding: 8px 12px; border-radius: 6px; color: #7d1c1c; background: #fee; border: 1px solid #e99; }
+    #error[hidden] { display: none; }
+    #preview_modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 4vh 4vw; background: rgb(0 0 0 / 42%); }
+    #preview_modal[hidden] { display: none; }
+    .preview-dialog { position: relative; width: min(1480px, 96vw); height: min(940px, 92vh); display: flex; flex-direction: column; overflow: hidden; background: Canvas; border-radius: 10px; box-shadow: 0 12px 50px #0005; }
+    .preview-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; padding: 9px 14px; border-bottom: 1px solid #d0d4da; color: CanvasText; background: Canvas; }
+    .preview-dialog-header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #closePreview { border: 0; border-radius: 5px; padding: 5px 10px; color: CanvasText; background: color-mix(in srgb, CanvasText 10%, Canvas); cursor: pointer; font: inherit; }
+    #modalCanvasHost { min-height: 0; flex: 1; background: #f2f3f5; }
+    #modalControlsHost { flex-shrink: 0; }
+  </style>
+</head>
+<body>
+  <div id="canvas_stage"><canvas id="wordcraft_preview_canvas"></canvas></div>
+  <div id="wordcraft_preview_loading">Loading WordCraft Preview…</div>
+  <div id="controlsHost"></div>
+  <div id="controls" hidden>
+    <button id="openFile" type="button">打开文件</button>
+    <input id="fileInput" type="file" hidden accept=".docx,.docm,.dotx,.dotm,.doc,.dot,.txt,.xml">
+    <button id="zoomOut" type="button" aria-label="Zoom out">−</button>
+    <button id="zoomIn" type="button" aria-label="Zoom in">＋</button>
+    <button id="zoomFit" type="button">适应页宽</button>
+    <button id="previousPage" type="button" aria-label="Previous page">‹</button>
+    <input id="pageNumber" type="number" min="1" value="1" size="4" aria-label="Page number">
+    <span id="pageTotal">/ 0</span>
+    <button id="nextPage" type="button" aria-label="Next page">›</button>
+    <input id="findQuery" type="search" placeholder="搜索" aria-label="Search">
+    <button id="findButton" type="button">查找</button>
+    <button id="findPrevious" type="button" aria-label="Previous match">↑</button>
+    <button id="findNext" type="button" aria-label="Next match">↓</button>
+    <select id="language" aria-label="Language"><option value="auto">自动</option></select>
+    <select id="theme" aria-label="Theme"><option value="auto">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
+    <span id="status"></span>
+  </div>
+  <div id="error" hidden role="alert"></div>
+  <div id="preview_modal" hidden role="dialog" aria-modal="true" aria-labelledby="previewTitle">
+    <div class="preview-dialog">
+      <div class="preview-dialog-header">
+        <strong id="previewTitle">WordCraft Preview</strong>
+        <button id="closePreview" type="button">关闭</button>
+      </div>
+      <div id="modalCanvasHost"></div>
+      <div id="modalControlsHost"></div>
+    </div>
+  </div>
+  <script>
+    (() => {
+      let preview;
+      let fontGestureRetry = false;
+      const $ = id => document.getElementById(id);
+      const canvas = $('wordcraft_preview_canvas');
+      const canvasStage = $('canvas_stage');
+      const controls = $('controls');
+      const controlsHost = $('controlsHost');
+      const modal = $('preview_modal');
+      const modalCanvasHost = $('modalCanvasHost');
+      const modalControlsHost = $('modalControlsHost');
+      const showError = error => { $('error').textContent = String(error?.message || error); $('error').hidden = false; };
+      const getPreview = () => {
+        if (preview) return preview;
+        const Constructor = window.wasmBindings?.WordCraftPreview;
+        if (!Constructor) throw new Error('WordCraft Preview is still starting');
+        preview = new Constructor();
+        return preview;
+      };
+      const invoke = fn => { try { return fn(getPreview()); } catch (error) { showError(error); return undefined; } };
+      const requestSystemFonts = () => {
+        if (typeof window.queryLocalFonts !== 'function') {
+          $('status').textContent = '当前浏览器不支持本地字体访问';
+          return;
+        }
+        try {
+          $('status').textContent = '正在加载系统字体…';
+          getPreview().loadSystemFonts();
+        } catch (error) { showError(error); }
+      };
+      const updateStatus = () => {
+        if (!preview) return;
+        const count = preview.getPageCount();
+        $('pageTotal').textContent = `/ ${count}`;
+        $('pageNumber').max = String(Math.max(1, count));
+        $('pageNumber').value = String(Math.min(Math.max(1, preview.getCurrentPage()), Math.max(1, count)));
+        $('status').textContent = preview.getSelection() ? `已选择 ${preview.getSelection().length} 字符` : '';
+      };
+      const installLanguageOptions = api => {
+        const select = $('language');
+        const rows = typeof api.getLanguages === 'function' ? api.getLanguages() : [];
+        for (const [code, name] of rows) {
+          if (code !== 'auto') select.add(new Option(name, code));
+        }
+      };
+      const showPreview = file => {
+        modalCanvasHost.appendChild(canvas);
+        modalControlsHost.appendChild(controls);
+        canvas.classList.add('modal-canvas');
+        controls.classList.add('modal-controls');
+        $('previewTitle').textContent = file?.name || 'WordCraft Preview';
+        modal.hidden = false;
+      };
+      const closePreview = () => {
+        canvasStage.appendChild(canvas);
+        controlsHost.appendChild(controls);
+        canvas.classList.remove('modal-canvas');
+        controls.classList.remove('modal-controls');
+        modal.hidden = true;
+      };
+      $('openFile').onclick = () => $('fileInput').click();
+      $('fileInput').onchange = async () => {
+        const file = $('fileInput').files?.[0]; if (!file) return;
+        try { showPreview(file); await getPreview().loadFile(file); $('error').hidden = true; } catch (error) { closePreview(); showError(error); } finally { $('fileInput').value = ''; }
+      };
+      $('closePreview').onclick = closePreview;
+      modal.onclick = event => { if (event.target === modal) closePreview(); };
+      document.addEventListener('keydown', event => { if (event.key === 'Escape' && !modal.hidden) closePreview(); });
+      $('zoomIn').onclick = () => invoke(api => api.zoomIn());
+      $('zoomOut').onclick = () => invoke(api => api.zoomOut());
+      $('zoomFit').onclick = () => invoke(api => api.zoomToFit());
+      $('previousPage').onclick = () => invoke(api => api.goToPage(Math.max(1, api.getCurrentPage() - 1)));
+      $('nextPage').onclick = () => invoke(api => api.goToPage(api.getCurrentPage() + 1));
+      $('pageNumber').onchange = () => invoke(api => api.goToPage(Number($('pageNumber').value)));
+      $('findButton').onclick = () => invoke(api => api.find($('findQuery').value, {}));
+      $('findQuery').onkeydown = event => { if (event.key === 'Enter') $('findButton').click(); };
+      $('findPrevious').onclick = () => invoke(api => api.findPrevious());
+      $('findNext').onclick = () => invoke(api => api.findNext());
+      $('language').onchange = event => invoke(api => api.setLanguage(event.target.value));
+      $('theme').onchange = event => invoke(api => api.setTheme(event.target.value));
+      window.addEventListener('wordcraft-preview-ready', () => {
+        try {
+          const api = getPreview();
+          installLanguageOptions(api);
+          // Local Font Access is optional; the WASM side logs a graceful fallback when the
+          // browser does not support it or the permission is denied.
+          requestSystemFonts();
+          $('controls').hidden = false;
+          $('wordcraft_preview_loading')?.remove();
+        } catch (error) { showError(error); }
+      }, { once: true });
+      // Chromium requires transient user activation for Local Font Access. The automatic call
+      // above is still useful in browsers that allow it; retry once on the first real gesture.
+      window.addEventListener('pointerdown', () => {
+        if (fontGestureRetry) return;
+        fontGestureRetry = true;
+        requestSystemFonts();
+      }, { once: true, capture: true });
+      window.addEventListener('TrunkApplicationStarted', () => { try { getPreview(); } catch (_) {} }, { once: true });
+      setInterval(updateStatus, 150);
+    })();
+  </script>
+</body>
+</html>

@@ -1,4 +1,6 @@
-use super::doc_state::{MAX_UNDO, Selection, UNDO_LIST_MAX, Undo, next_math_session};
+#[cfg(feature = "math")]
+use super::doc_state::next_math_session;
+use super::doc_state::{MAX_UNDO, Selection, UNDO_LIST_MAX, Undo};
 use super::{Arc, Document, Session};
 
 impl Session {
@@ -28,6 +30,7 @@ impl Session {
     }
 
     /// Take back the newest undo step: a command that joins an earlier step of its own.
+    #[cfg(feature = "editing")]
     pub(crate) fn drop_last_undo_step(&mut self) {
         self.history.pop();
     }
@@ -149,6 +152,7 @@ impl Session {
     }
 
     /// Undo steps pushed so far, evicted ones included: only grows while steps are added.
+    #[cfg(feature = "editing")]
     pub(crate) fn undo_steps_so_far(&self) -> u64 {
         self.history.len() as u64 + self.undo_evicted
     }
@@ -208,9 +212,12 @@ impl Session {
         self.typing_open = false;
         // Undoing the automatic capitalisation's own step makes its word an exception; any
         // other Undo forgets the capital.
-        let steps = self.history.len() as u64 + self.undo_evicted;
-        if let Some(c) = self.autocap.take().filter(|c| c.depth == steps) {
-            c.add_exceptions(&mut self.prefs.autocorrect);
+        #[cfg(feature = "editing")]
+        {
+            let steps = self.history.len() as u64 + self.undo_evicted;
+            if let Some(c) = self.autocap.take().filter(|c| c.depth == steps) {
+                c.add_exceptions(&mut self.prefs.autocorrect);
+            }
         }
         let Some(u) = self.history.pop().map(Arc::unwrap_or_clone) else { return false };
         let cur = Undo {
@@ -231,8 +238,16 @@ impl Session {
 
     /// Would Undo (or Redo) take the document's protection away? Only Stop Protection lifts it.
     pub fn step_lifts_protection(&self, redo: bool) -> bool {
-        let next = if redo { self.redo.last() } else { self.history.last() };
-        next.is_some_and(|u| crate::cmd::protect::protection_lifted(&self.doc, &u.doc))
+        #[cfg(feature = "editing")]
+        {
+            let next = if redo { self.redo.last() } else { self.history.last() };
+            next.is_some_and(|u| crate::cmd::protect::protection_lifted(&self.doc, &u.doc))
+        }
+        #[cfg(not(feature = "editing"))]
+        {
+            let _ = redo;
+            false
+        }
     }
 
     /// Redoes the newest undone step by swapping the snapshots back, replacing the body identity,
@@ -259,22 +274,28 @@ impl Session {
     /// object at that offset, may be a different one now. A new session token starts a new IME
     /// context; if tokens are exhausted, the equation is left (fail closed).
     fn refresh_math_session(&mut self) {
-        if self.math.is_none() {
-            return;
-        }
-        match next_math_session() {
-            Some(session) => {
-                if let Some(m) = self.math.as_mut() {
-                    m.session = session;
-                }
+        #[cfg(feature = "math")]
+        {
+            if self.math.is_none() {
+                return;
             }
-            None => self.math = None,
+            match next_math_session() {
+                Some(session) => {
+                    if let Some(m) = self.math.as_mut() {
+                        m.session = session;
+                    }
+                }
+                None => self.math = None,
+            }
         }
     }
 
     /// Drop history (after open / new).
     pub fn reset_history(&mut self) {
-        self.autocap = None;
+        #[cfg(feature = "editing")]
+        {
+            self.autocap = None;
+        }
         self.history.clear();
         self.redo.clear();
         self.typing_open = false;

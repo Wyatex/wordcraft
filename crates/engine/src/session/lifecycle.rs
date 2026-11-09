@@ -17,15 +17,19 @@ impl Session {
     /// with `removed` (words just taken out) left out of the merge with the file. A failed save
     /// keeps the words in memory and never fails the command (#40), as does a file outside the
     /// automation roots in force: it is read, then replaced beside itself (#3737).
+    #[cfg(feature = "proofing")]
     pub(crate) fn persist_user_dictionary(&self, removed: &[String]) {
         let Some(path) = self.user_dict_path.as_deref() else { return };
         let name = path.to_string_lossy();
+        #[cfg(feature = "proofing")]
         if let Err(e) = crate::file_access::check_read(&name)
             .and_then(|()| crate::file_access::check_write(&name))
             .and_then(|()| crate::custom_dict::save_custom_dictionary(path, removed))
         {
             log::warn!("custom dictionary: save failed: {e}");
         }
+        #[cfg(not(feature = "proofing"))]
+        let _ = (path, removed, name);
     }
 
     /// Start an editing session at the document beginning with empty history and
@@ -45,6 +49,7 @@ impl Session {
             path,
             file_name,
             dirty,
+            #[cfg(feature = "editing")]
             pending_move,
             find,
             goal_x,
@@ -59,6 +64,7 @@ impl Session {
             equation_join_next,
             ime_text_join,
             join_anchor,
+            #[cfg(feature = "editing")]
             autocap,
             rev,
             document_id,
@@ -69,16 +75,21 @@ impl Session {
             layout,
             typing,
             originals,
+            #[cfg(feature = "editing")]
             md_source,
+            #[cfg(feature = "editing")]
             md_file,
+            #[cfg(feature = "editing")]
             picture_looks,
             versions,
             autosave,
             bib_style,
+            #[cfg(feature = "editing")]
             merge,
+            #[cfg(feature = "math")]
             math,
             password,
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "editing", not(target_arch = "wasm32")))]
             recovery_slot,
             also_selected,
             column,
@@ -89,6 +100,7 @@ impl Session {
         } = DocState::new(doc, 1, ViewState::default());
         Session {
             doc,
+            read_only: cfg!(not(feature = "editing")),
             sel,
             view,
             pending,
@@ -100,6 +112,7 @@ impl Session {
             default_user_dict_path: None,
             dirty,
             clipboard: None,
+            #[cfg(feature = "editing")]
             pending_move,
             clipboard_text: String::new(),
             clipboard_html: String::new(),
@@ -116,6 +129,7 @@ impl Session {
             status: String::new(),
             new_header_parts,
             hf_return,
+            #[cfg(feature = "editing")]
             review_style: None,
             history,
             undo_evicted,
@@ -125,11 +139,13 @@ impl Session {
             equation_join_next,
             ime_text_join,
             join_anchor,
+            #[cfg(feature = "editing")]
             autocap,
             rev,
             document_id,
             untitled,
             made_rev,
+            #[cfg(feature = "editing")]
             protect_facts: std::sync::Mutex::new(None),
             ime_body_epoch,
             ime_state_revision: None,
@@ -143,8 +159,11 @@ impl Session {
             layout,
             typing,
             originals,
+            #[cfg(feature = "editing")]
             md_source,
+            #[cfg(feature = "editing")]
             md_file,
+            #[cfg(feature = "editing")]
             picture_looks,
             last_command: None,
             recording: None,
@@ -153,25 +172,31 @@ impl Session {
             building_blocks: Default::default(),
             autosave,
             bib_style,
+            #[cfg(feature = "editing")]
             merge,
             ui_requests: Vec::new(),
+            #[cfg(feature = "math")]
             math,
+            #[cfg(feature = "math")]
             math_latex: false,
             math_normal_text: false,
             also_selected,
+            #[cfg(feature = "editing")]
             member: None,
             prefs: Prefs::default(),
             system_region: Default::default(),
             keymap: craft_keymap::Overrides::default(),
             findings: None,
+            #[cfg(feature = "editing")]
             ribbon: crate::RibbonLayout::default(),
             editing_lang: None,
+            #[cfg(feature = "editing")]
             read_aloud: Default::default(),
             windows: Default::default(),
             password,
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "editing", not(target_arch = "wasm32")))]
             recovery: None,
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "editing", not(target_arch = "wasm32")))]
             recovery_slot,
             column,
             column_mode,

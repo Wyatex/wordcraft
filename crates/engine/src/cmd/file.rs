@@ -18,6 +18,7 @@ pub const MAX_AUTHOR_CHARS: usize = 255;
 /// The user name as it is stored: trimmed, stripped of control characters (they can't go into
 /// the saved XML) and cut to [`MAX_AUTHOR_CHARS`]; a blank name is refused so revisions always
 /// carry an author.
+#[cfg(feature = "editing")]
 pub fn normalize_author(name: &str) -> Result<String, CmdError> {
     let name: String = name.trim().chars().filter(|c| !c.is_control()).take(MAX_AUTHOR_CHARS).collect();
     let name = name.trim_end();
@@ -30,6 +31,7 @@ pub fn normalize_author(name: &str) -> Result<String, CmdError> {
 /// Sets the user name that new tracked changes and comments are recorded under. The name is
 /// normalised by [`normalize_author`].
 /// A protected document refuses it: the name is the identity its exceptions are checked against.
+#[cfg(feature = "editing")]
 pub(crate) fn set_author(s: &mut Session, v: &Value) -> CmdResult {
     super::protect::check_user_name(s)?;
     s.author = normalize_author(p::req_str(v, "name")?)?;
@@ -41,6 +43,7 @@ pub(crate) fn set_author(s: &mut Session, v: &Value) -> CmdResult {
 }
 
 /// Rename the current file in its directory, or name a document before its first save.
+#[cfg(feature = "editing")]
 fn rename(s: &mut Session, v: &Value) -> CmdResult {
     let name = p::req_str(v, "name")?.trim();
     if name.is_empty()
@@ -84,38 +87,43 @@ fn rename(s: &mut Session, v: &Value) -> CmdResult {
 /// PDF/PNG/print output and print settings, close, properties and info, author and privacy
 /// settings, and document inspection and text access. Recovery, compatibility, sharing, autosave,
 /// `file.newFromTemplate` and `file.saveTemplate` are registered in [`super::tools::specs`].
-pub fn specs() -> Vec<CommandSpec> {
+fn base_specs() -> Vec<CommandSpec> {
     vec![
-        CommandSpec::new("file.rename", "Rename Document", "File › Info", rename).params(r#"{"name": string (document name; its extension is kept, so the name may be given with or without it)}"#).pure(),
-        CommandSpec::new("file.new", "New", "File", new).key("Mod+N").params(r#"{"template"?: "blank|sample|letter|resume|report"}"#).pure(),
         CommandSpec::new("file.open", "Open", "File", open)
             .key("Mod+O / Mod+F12 / Mod+Alt+F2")
             .params(r#"{"path": string, "data"?: base64 (the file's bytes; `path` then only names it), "password"?: string (for a password-protected Word or OpenDocument text file)}"#)
             .pure(),
-        CommandSpec::new("file.save", "Save", "File", save)
-            .key("Mod+S / Shift+F12 / Alt+Shift+F2")
-            .params(r#"{"path"?: string, "password"?: string (encrypt this and later saves with it, as file.encrypt does), "markup"?: bool (Print Markup for a PDF, PNG, HTML, Markdown or text copy: comments shown; default file.printMarkup), "format"?: "wordml2003" (an .xml file as a Word 2003 XML Document) | "flatopc" (as a Word XML Document, the default; saving over a Word 2003 XML file keeps that format), "strict"?: bool (a .pdf or .png only: refuse, writing nothing, if a character can't be drawn or a picture is missing; see file.strictReport)}"#)
-            .pure(),
-        CommandSpec::new("file.saveAs", "Save As", "File", save_as).key(super::mac_or("F12 / Mod+Shift+S", "F12 / Alt+F2")).params(r#"{"path": string, "password"?: string, "markup"?: bool, "format"?: string (as file.save), "strict"?: bool (as file.save)}"#).pure(),
-        // Pure: the password must not land in Repeat or a recorded macro, and it isn't an edit
-        // to undo; it marks the document as changed itself.
-        CommandSpec::new("file.encrypt", "Encrypt with Password", "File › Info › Protect Document", encrypt)
-            .params(r#"{"password": string (Word packages and OpenDocument text files (.odt, .ott) are saved encrypted with it) | null or "" (saved unencrypted)}"#)
-            .pure(),
-        CommandSpec::new("file.exportPdf", "Export PDF", "File › Export", |s, v| {
-            // No path (the command search, say): the app asks where to save, as File › Export
-            // does, instead of failing on the required parameter (#2313).
-            let Some(path) = p::str(v, "path") else {
-                s.push_ui_request(json!({"open": "exportPdf"}));
-                return Ok(json!({"exported": false}));
-            };
-            let path = if path.to_ascii_lowercase().ends_with(".pdf") { path.to_string() } else { format!("{path}.pdf") };
-            let opts = export_options(s, v);
-            crate::io::save_path_with(std::path::Path::new(&path), &s.doc, None, &opts).map_err(CmdError::Failed)?;
-            Ok(json!({"path": path, "markup": opts.markup}))
+        CommandSpec::new("file.info", "Info", "File", info).pure(),
+        CommandSpec::new("document.inspect", "Inspect Document", "Agents", inspect).params(r#"{"text"?: bool}"#).pure(),
+        CommandSpec::new("document.text", "Document Text", "Agents", |s, v| {
+            let story = super::story_param(s, v);
+            Ok(json!({"text": s.doc.final_text(story)}))
         })
-        .params(r#"{"path": string, "markup"?: bool (Print Markup: tracked changes marked up and each page scaled down beside the comments in balloons; default file.printMarkup), "strict"?: bool (refuse, writing nothing, if a character can't be drawn or a picture is missing; see file.strictReport)}"#)
         .pure(),
+        CommandSpec::new("document.paragraph", "Paragraph Details", "Agents", paragraph).params(r#"{"path": [n], "story"?: Story}"#).pure(),
+        CommandSpec::new("document.selection", "Selection", "Agents", |s, _| {
+            let mut r = sel_result(s)?;
+            if let Some(o) = r.as_object_mut() {
+                o.insert("text".into(), json!(s.selected_text()));
+                #[cfg(feature = "editing")]
+                o.insert("format".into(), super::format::state(s));
+            }
+            Ok(r)
+        })
+        .pure(),
+        CommandSpec::new("document.layout", "Layout Summary", "Agents", layout_summary).pure(),
+    ]
+}
+
+pub fn specs() -> Vec<CommandSpec> {
+    #[cfg(any(feature = "editing", feature = "write", feature = "pdf"))]
+    let mut out = base_specs();
+    #[cfg(not(any(feature = "editing", feature = "write", feature = "pdf")))]
+    let out = base_specs();
+    #[cfg(feature = "editing")]
+    out.extend([
+        CommandSpec::new("file.rename", "Rename Document", "File › Info", rename).params(r#"{"name": string (document name; its extension is kept, so the name may be given with or without it)}"#).pure(),
+        CommandSpec::new("file.new", "New", "File", new).key("Mod+N").params(r#"{"template"?: "blank|sample|letter|resume|report"}"#).pure(),
         CommandSpec::new("file.exportPng", "Export Page as PNG", "File › Export", export_png)
             .params(r#"{"path": string, "page"?: n (1-based), "scale"?: px per pt, "markup"?: bool (the page with its comments in balloons beside it; default file.printMarkup), "strict"?: bool (refuse, writing nothing, if a character on the page can't be drawn or a picture is missing; see file.strictReport)}"#)
             .pure(),
@@ -129,11 +137,6 @@ pub fn specs() -> Vec<CommandSpec> {
         })
         .params(r#"{"value"?: bool (omit to toggle)} — PDFs, prints and copies show comments (balloons beside each page; a list at the end of HTML, Markdown and text) and tracked changes"#)
         .pure(),
-        CommandSpec::new("file.printPdf", "Print to PDF", "File › Print", crate::print::print_pdf_to_file)
-            .params(
-                r#"{"path": string, "pagesPerSheet"?: 1 | 2 | 4 | 6 | 9 | 16 | "booklet" | "bookletReverse", "range"?: "all" | "current" | "selection" (the pages the selection touches) | "custom", "pages"?: "1-3,5" (implies custom), "parity"?: "all" | "odd" | "even", "copies"?: 1-999, "collate"?: bool (default true), "paper"?: "none" | "Letter" | "Legal" | "A4" | … (a Layout › Size name: scale every page to this paper, centred; the document keeps its size), "compress"?: bool (default true: compress the PDF's content streams; false writes the same pages uncompressed, which is larger)"#,
-            )
-            .pure(),
         CommandSpec::new("file.print", "Print", "File", |s, _| {
             s.push_ui_request(json!({"open": "print"}));
             sel_result(s)
@@ -152,7 +155,6 @@ pub fn specs() -> Vec<CommandSpec> {
             .pure(),
         CommandSpec::new("file.properties", "Properties", "File › Info", properties)
             .params(r#"{"title"?, "subject"?, "author"?, "keywords"?, "comments"?, "category"?, "custom"?: {name: string | {"value": string, "linkTarget"?: string | null} | null (removes)}}; text values and bookmark targets are at most 1 MiB; a string keeps an existing target, an object replaces it (omitted/null target unlinks)"#),
-        CommandSpec::new("file.info", "Info", "File", info).pure(),
         CommandSpec::new("file.setAuthor", "User Name", "File › Options › General", set_author)
             .params(r#"{"name": string (author of new tracked changes and comments)}"#)
             .pure(),
@@ -178,23 +180,6 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("file.privacy", "Privacy Settings", "File › Options › Save", |s, _| Ok(privacy(s)))
             .params(r#"{} → {"removePersonalInfo": bool, "removeDateTime": bool} (file.privacyOptions changes them)"#)
             .pure(),
-        CommandSpec::new("document.inspect", "Inspect Document", "Agents", inspect).params(r#"{"text"?: bool}"#).pure(),
-        CommandSpec::new("document.text", "Document Text", "Agents", |s, v| {
-            let story = super::story_param(s, v);
-            Ok(json!({"text": s.doc.final_text(story)}))
-        })
-        .pure(),
-        CommandSpec::new("document.paragraph", "Paragraph Details", "Agents", paragraph).params(r#"{"path": [n], "story"?: Story}"#).pure(),
-        CommandSpec::new("document.selection", "Selection", "Agents", |s, _| {
-            let mut r = sel_result(s)?;
-            if let Some(o) = r.as_object_mut() {
-                o.insert("text".into(), json!(s.selected_text()));
-                o.insert("format".into(), super::format::state(s));
-            }
-            Ok(r)
-        })
-        .pure(),
-        CommandSpec::new("document.layout", "Layout Summary", "Agents", layout_summary).pure(),
         CommandSpec::new("document.setText", "Replace Document Text", "Agents", |s, v| {
             let text = p::req_str(v, "text")?;
             let d = Document::from_text(text);
@@ -202,21 +187,62 @@ pub fn specs() -> Vec<CommandSpec> {
             // The body is new even though the document id stays: a live IME composition (or an
             // equation editing session at the same offset) belongs to the old content.
             s.note_body_replaced();
-            s.math = None;
+            #[cfg(feature = "math")]
+            {
+                s.math = None;
+            }
             s.sel = crate::Selection::caret(s.doc.start_of(StoryRef::Body));
             sel_result(s)
         })
         .params(r#"{"text": string}"#),
-    ]
+    ]);
+    #[cfg(feature = "write")]
+    out.extend([
+        CommandSpec::new("file.save", "Save", "File", save)
+            .key("Mod+S / Shift+F12 / Alt+Shift+F2")
+            .params(r#"{"path"?: string, "password"?: string (encrypt this and later saves with it, as file.encrypt does), "markup"?: bool (Print Markup for a PDF, PNG, HTML, Markdown or text copy: comments shown; default file.printMarkup), "format"?: "wordml2003" (an .xml file as a Word 2003 XML Document) | "flatopc" (as a Word XML Document, the default; saving over a Word 2003 XML file keeps that format), "strict"?: bool (a .pdf or .png only: refuse, writing nothing, if a character can't be drawn or a picture is missing; see file.strictReport)}"#)
+            .pure(),
+        CommandSpec::new("file.saveAs", "Save As", "File", save_as).key(super::mac_or("F12 / Mod+Shift+S", "F12 / Alt+F2")).params(r#"{"path": string, "password"?: string, "markup"?: bool, "format"?: string (as file.save), "strict"?: bool (as file.save)}"#).pure(),
+        // Pure: the password must not land in Repeat or a recorded macro, and it isn't an edit
+        // to undo; it marks the document as changed itself.
+        CommandSpec::new("file.encrypt", "Encrypt with Password", "File › Info › Protect Document", encrypt)
+            .params(r#"{"password": string (Word packages and OpenDocument text files (.odt, .ott) are saved encrypted with it) | null or "" (saved unencrypted)}"#)
+            .pure(),
+        CommandSpec::new("file.exportPdf", "Export PDF", "File › Export", |s, v| {
+            // No path (the command search, say): the app asks where to save, as File › Export
+            // does, instead of failing on the required parameter (#2313).
+            let Some(path) = p::str(v, "path") else {
+                s.push_ui_request(json!({"open": "exportPdf"}));
+                return Ok(json!({"exported": false}));
+            };
+            let path = if path.to_ascii_lowercase().ends_with(".pdf") { path.to_string() } else { format!("{path}.pdf") };
+            let opts = export_options(s, v);
+            crate::io::save_path_with(std::path::Path::new(&path), &s.doc, None, &opts).map_err(CmdError::Failed)?;
+            Ok(json!({"path": path, "markup": opts.markup}))
+        })
+        .params(r#"{"path": string, "markup"?: bool (Print Markup: tracked changes marked up and each page scaled down beside the comments in balloons; default file.printMarkup), "strict"?: bool (refuse, writing nothing, if a character can't be drawn or a picture is missing; see file.strictReport)}"#)
+        .pure(),
+    ]);
+    #[cfg(feature = "pdf")]
+    out.push(
+        CommandSpec::new("file.printPdf", "Print to PDF", "File › Print", crate::print::print_pdf_to_file)
+            .params(
+                r#"{"path": string, "pagesPerSheet"?: 1 | 2 | 4 | 6 | 9 | 16 | "booklet" | "bookletReverse", "range"?: "all" | "current" | "selection" (the pages the selection touches) | "custom", "pages"?: "1-3,5" (implies custom), "parity"?: "all" | "odd" | "even", "copies"?: 1-999, "collate"?: bool (default true), "paper"?: "none" | "Letter" | "Legal" | "A4" | … (a Layout › Size name: scale every page to this paper, centred; the document keeps its size), "compress"?: bool (default true: compress the PDF's content streams; false writes the same pages uncompressed, which is larger)"#,
+            )
+            .pure(),
+    );
+    out
 }
 
 /// The document's privacy settings, as `file.privacy` and `file.privacyOptions` return them.
+#[cfg(feature = "editing")]
 fn privacy(s: &Session) -> Value {
     json!({"removePersonalInfo": s.doc.settings.remove_personal_info, "removeDateTime": s.doc.settings.remove_date_time})
 }
 
 /// Open a new document beside the open ones and make it active: a blank one in the saved
 /// proofing language, or the requested template.
+#[cfg(feature = "editing")]
 fn new(s: &mut Session, v: &Value) -> CmdResult {
     let doc = match p::str(v, "template").unwrap_or("blank") {
         "sample" => crate::sample::sample_document(),
@@ -270,6 +296,7 @@ fn open(s: &mut Session, v: &Value) -> CmdResult {
     }
     s.path = Some(path.into());
     // A Markdown file's own text, for the view to show and Save to write back as it is.
+    #[cfg(feature = "editing")]
     if super::md_source::is_markdown_file(std::path::Path::new(path)) {
         s.md_file = markdown_file_text(path, v);
     }
@@ -285,10 +312,11 @@ fn open(s: &mut Session, v: &Value) -> CmdResult {
 /// A Markdown file's own text as `file.open` finds it: the bytes the caller hands over (base64 in
 /// `data`, the same ones `read_document` decodes), else the head of the file at `path`.
 /// `FileText::from_bytes` keeps it only when it can be written back as it is.
+#[cfg(feature = "editing")]
 fn markdown_file_text(path: &str, v: &Value) -> super::md_source::FileText {
     if let Some(data) = p::str(v, "data") {
         // `read_document` has already refused a text it cannot decode.
-        return super::insert::base64_decode(data).map(|bytes| super::md_source::FileText::from_bytes(&bytes)).unwrap_or_default();
+        return crate::io::base64_decode(data).map(|bytes| super::md_source::FileText::from_bytes(&bytes)).unwrap_or_default();
     }
     // Without `data`, the file's own bytes; not reachable on the web, where a file only arrives
     // as `data`.
@@ -312,7 +340,7 @@ fn markdown_file_text(path: &str, v: &Value) -> super::md_source::FileText {
 fn read_document(s: &Session, path: &str, v: &Value) -> Result<(Document, bool), CmdError> {
     let password = p::str(v, "password");
     let (mut doc, encrypted) = if let Some(data) = p::str(v, "data") {
-        let bytes = super::insert::base64_decode(data).ok_or_else(|| CmdError::Params("bad base64".into()))?;
+        let bytes = crate::io::base64_decode(data).ok_or_else(|| CmdError::Params("bad base64".into()))?;
         if bytes.is_empty() {
             (normal_document(s), false)
         } else {
@@ -338,6 +366,7 @@ fn read_document(s: &Session, path: &str, v: &Value) -> Result<(Document, bool),
 /// document gives way to it, as to a file `file.open` opens: that is how a template the platform
 /// hands the app starts (#3433). The template is only read; the new document has no file, so
 /// saving it asks where to write, and a protected template's password doesn't come along.
+#[cfg(feature = "editing")]
 pub(crate) fn new_from_template(s: &mut Session, v: &Value) -> CmdResult {
     let path = p::req_str(v, "path")?;
     let (mut doc, _) = read_document(s, path, v)?;
@@ -352,6 +381,7 @@ pub(crate) fn new_from_template(s: &mut Session, v: &Value) -> CmdResult {
 }
 
 /// Close a document with no window to ask about it (agents, headless sessions).
+#[cfg(feature = "editing")]
 fn close_document(s: &mut Session, v: &Value) -> CmdResult {
     let id = match v.get("id").filter(|x| !x.is_null()) {
         None => s.document_id(),
@@ -370,6 +400,7 @@ fn close_document(s: &mut Session, v: &Value) -> CmdResult {
 
 /// File › Info › Protect Document › Encrypt with Password: the password Word packages and
 /// OpenDocument text files (.odt, .ott) are saved with from now on, or none.
+#[cfg(feature = "write")]
 fn encrypt(s: &mut Session, v: &Value) -> CmdResult {
     let password = match v.get("password") {
         Some(Value::Null) => None,
@@ -392,6 +423,7 @@ fn encrypt(s: &mut Session, v: &Value) -> CmdResult {
 
 /// Executes `file.save`: writes the document or text to disk, preserving exact file text for
 /// unedited Markdown files, and updating session path and dirty state.
+#[cfg(feature = "write")]
 fn save(s: &mut Session, v: &Value) -> CmdResult {
     let path = match p::str(v, "path").map(std::path::PathBuf::from).or_else(|| s.path.clone()) {
         Some(p) => p,
@@ -464,18 +496,19 @@ fn save(s: &mut Session, v: &Value) -> CmdResult {
 }
 
 /// Does `path` hold a Word 2003 XML Document already (so a plain save keeps that format)?
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "write", not(target_arch = "wasm32")))]
 fn is_word_2003_file(path: &std::path::Path) -> bool {
     // The root element and its namespaces come first.
     let Ok(head) = crate::io::read_file_head(&path.to_string_lossy(), 64 * 1024) else { return false };
     wordcraft_docx::sniff_xml(&head) == wordcraft_docx::XmlKind::WordMl2003
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(feature = "write", target_arch = "wasm32"))]
 fn is_word_2003_file(_path: &std::path::Path) -> bool {
     false
 }
 
+#[cfg(feature = "write")]
 fn save_as(s: &mut Session, v: &Value) -> CmdResult {
     if p::str(v, "path").is_none() {
         s.push_ui_request(json!({"open": "saveAs"}));
@@ -487,6 +520,7 @@ fn save_as(s: &mut Session, v: &Value) -> CmdResult {
 /// How a copy is written: Print Markup from the command's `markup`, else the File › Print
 /// setting (`file.printMarkup`); comments and revision marks/colours as Track Changes Options show them;
 /// digits as the Numeral setting shows them on screen.
+#[cfg(any(feature = "write", feature = "pdf"))]
 pub fn export_options(s: &Session, v: &Value) -> crate::io::ExportOptions {
     let markup = p::bool(v, "markup").unwrap_or(s.prefs.print_markup);
     crate::io::ExportOptions {
@@ -500,6 +534,7 @@ pub fn export_options(s: &Session, v: &Value) -> crate::io::ExportOptions {
 }
 
 /// `strict: true` is for a PDF or a page image only: any other output is a parameter error.
+#[cfg(any(feature = "write", feature = "pdf"))]
 fn check_strict_output(strict: bool, path: &str) -> Result<(), CmdError> {
     if strict && !crate::strict::is_strict_output(path) {
         return Err(CmdError::Params("`strict` applies to a .pdf or .png output only".into()));
@@ -509,6 +544,7 @@ fn check_strict_output(strict: bool, path: &str) -> Result<(), CmdError> {
 
 /// The strict report of a PDF export of the document (every page), or with `page` of the page
 /// image `file.exportPng` writes. Pure: it reads the document and writes nothing.
+#[cfg(feature = "editing")]
 fn strict_report(s: &mut Session, v: &Value) -> CmdResult {
     let opts = export_options(s, v);
     let report = match p::u64(v, "page") {
@@ -532,6 +568,7 @@ fn strict_report(s: &mut Session, v: &Value) -> CmdResult {
 }
 
 /// Exports a page of the current document as a PNG image at the requested scale.
+#[cfg(feature = "editing")]
 fn export_png(s: &mut Session, v: &Value) -> CmdResult {
     // No path: the app asks where to save, as file.exportPdf does (#2313).
     let Some(path) = p::str(v, "path") else {
@@ -566,12 +603,14 @@ fn export_png(s: &mut Session, v: &Value) -> CmdResult {
 /// Text and its bookmark association cross the dialog/command boundary together on rename.
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[cfg(feature = "editing")]
 struct LinkedCustomText<'a> {
     value: &'a str,
     #[serde(borrow)]
     link_target: Option<&'a str>,
 }
 
+#[cfg(feature = "editing")]
 fn properties(s: &mut Session, v: &Value) -> CmdResult {
     let c = &mut s.doc.core;
     let set = |dst: &mut String, k: &str| {

@@ -10,9 +10,14 @@
 use serde_json::{Value, json};
 use wordcraft_engine::DocInfo;
 
+#[cfg(feature = "full")]
 use craft::ui::contract::Show as _;
+#[cfg(feature = "full")]
 use craft::ui::menu::MenuItem;
 
+#[cfg(not(feature = "full"))]
+use crate::WordApp;
+#[cfg(feature = "full")]
 use crate::{WordApp, panes};
 
 /// What the window keeps for an open document while another one is shown.
@@ -22,6 +27,7 @@ pub(crate) struct Parked {
     autosave_path: Option<std::path::PathBuf>,
     /// The comment panel's selection and the comment and reply text typed in this document and not
     /// yet written to it.
+    #[cfg(feature = "full")]
     comments: craft::review::ui::CommentsPanelState,
 }
 
@@ -48,41 +54,48 @@ impl WordApp {
     /// front instead, or a new one opens for it.
     pub(crate) fn sync_document(&mut self) {
         let id = self.session.document_id();
+        #[cfg(feature = "full")]
         if self.windows.native() {
             self.prune_windows();
         }
         if id == self.shown_document {
             return;
         }
+        #[cfg(feature = "full")]
         if self.windows.native() && self.follow_in_windows(id) {
             return;
         }
         let left = std::mem::replace(&mut self.shown_document, id);
         let seen = self.carry_document_state(left, id);
+        #[cfg(feature = "full")]
         self.window_shows(id);
 
         self.canvas.show_other_document(seen);
         // A Save Changes prompt asked about the document that left: it goes, and its answer with it. The
         // operation stays (a quit closing documents one by one moves on), and an answer that arrives anyway
         // is refused as being about a replaced document (`apply_close_answer`).
+        #[cfg(feature = "full")]
         if let Some(id) = self.closing.as_mut().and_then(|c| c.prompt.take()) {
             self.close_prompt(id);
         }
         if let Some(ctx) = self.ctx.clone() {
             crate::dialogs::host::close_all(self, &ctx);
         }
-        self.spelling_review = None;
-        self.restrict = crate::restrict_pane::RestrictPane { open: self.restrict.open, ..Default::default() };
+        #[cfg(feature = "full")]
+        {
+            self.spelling_review = None;
+            self.restrict = crate::restrict_pane::RestrictPane { open: self.restrict.open, ..Default::default() };
+            self.change_picture_target = None;
+            self.recipient_list_pending = false;
+            self.smart_art_item = None;
+            self.read_aloud_at = None;
+            self.previews.document_changed();
+        }
         self.status = None;
-        self.change_picture_target = None;
-        self.recipient_list_pending = false;
         self.nav_search_focus = false;
-        self.smart_art_item = None;
-        self.read_aloud_at = None;
         self.info_editing = None;
         // Caches keyed by the revision alone: another document's revision can be the same number.
         self.status_counts = crate::window_ui::NOT_COUNTED;
-        self.previews.document_changed();
         // The Start screen's placeholder (#1129) goes once a document is open beside it.
         if let Some(placeholder) = self.no_document
             && placeholder != id
@@ -105,7 +118,11 @@ impl WordApp {
         if from == to {
             return false;
         }
-        let leaving = Parked { autosave_path: self.autosave_path.take(), comments: std::mem::take(&mut self.canvas.comments) };
+        let leaving = Parked {
+            autosave_path: self.autosave_path.take(),
+            #[cfg(feature = "full")]
+            comments: std::mem::take(&mut self.canvas.comments),
+        };
         if self.session.is_open(from) {
             self.parked.insert(from, leaving);
         }
@@ -113,7 +130,10 @@ impl WordApp {
         let seen = back.is_some();
         let back = back.unwrap_or_default();
         self.autosave_path = back.autosave_path;
-        self.canvas.comments = back.comments;
+        #[cfg(feature = "full")]
+        {
+            self.canvas.comments = back.comments;
+        }
         let session = &self.session;
         self.parked.retain(|d, _| session.is_open(*d));
         seen
@@ -167,6 +187,7 @@ impl WordApp {
     /// Whether the open document `id` has changes that aren't written to a file yet, or a save
     /// the browser hasn't confirmed. The Save Changes prompt asks about the same work, so the
     /// prompt and a programmatic refusal cannot drift apart (#1268, #3274).
+    #[cfg(feature = "full")]
     pub(crate) fn document_unsaved_by_id(&self, id: u64) -> bool {
         let dirty = self.session.document_dirty(id);
         let unconfirmed = self.saves_in_flight.iter().any(|s| s.marked_saved && s.document == id);
@@ -175,6 +196,7 @@ impl WordApp {
 
     /// Whether the open document `id` has comment or reply text typed but not yet written to
     /// it (#1348): closing the document would drop that text.
+    #[cfg(feature = "full")]
     pub(crate) fn document_has_comment_drafts(&self, id: u64) -> bool {
         if id == self.session.document_id() {
             return panes::has_comment_drafts(self);
@@ -186,6 +208,7 @@ impl WordApp {
     /// the others in the order they were opened. Unsaved changes, a save the browser hasn't
     /// confirmed, or comment text not yet written to the document. The Start screen's
     /// placeholder is never one, though other windows' documents are.
+    #[cfg(feature = "full")]
     fn unsaved_documents(&self) -> Vec<u64> {
         let active = self.session.document_id();
         let mut out = Vec::new();
@@ -201,6 +224,7 @@ impl WordApp {
     }
 
     /// Whether an open document has work that quitting would lose.
+    #[cfg(feature = "full")]
     pub(crate) fn has_unsaved_documents(&self) -> bool {
         !self.unsaved_documents().is_empty()
     }
@@ -208,6 +232,7 @@ impl WordApp {
     /// Quitting: start the quit guard over the documents with unsaved work, which shows each in
     /// turn and asks Save / Don't Save / Cancel about it. A guard already running keeps its open
     /// prompt. With none left, the app quits.
+    #[cfg(feature = "full")]
     pub(crate) fn ask_before_quit(&mut self) -> Value {
         let documents = self.unsaved_documents();
         if documents.is_empty() {
@@ -266,6 +291,7 @@ pub(crate) fn untitled_title(english: &str) -> Option<String> {
 /// View › Window › Switch Windows: the open windows (in one window, the open documents) in the
 /// order they were opened, this one marked, unsaved ones with the title bar's dot. Choosing one
 /// brings that window to the front (in one window, shows the document).
+#[cfg(feature = "full")]
 pub(crate) fn switch_windows_menu(ui: &mut egui::Ui, app: &mut WordApp) {
     let native = app.windows.native();
     let entries: Vec<(u64, String, bool)> = if native {
@@ -284,6 +310,7 @@ pub(crate) fn switch_windows_menu(ui: &mut egui::Ui, app: &mut WordApp) {
     }
 }
 
+#[cfg(feature = "full")]
 #[cfg(test)]
 mod tests {
     use serde_json::json;

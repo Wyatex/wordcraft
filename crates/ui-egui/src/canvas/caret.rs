@@ -57,6 +57,7 @@ struct TypingFace {
 /// The one rule for where the caret is, for the candidate window and the painter alike. `None`
 /// without a caret on a placed page.
 fn place(app: &WordApp, doc: &DocLayout, pages: &[PlacedPage]) -> Option<Placement> {
+    #[cfg(feature = "full")]
     if let Some(m) = app.session.math.clone()
         && let Some(bx) = doc.equation_box(&m.at, app.session.page_hint)
         && let Some(pr) = pages.iter().find(|p| p.page == bx.page)
@@ -145,6 +146,7 @@ fn step(app: &mut WordApp, request: LookRequest) -> Look {
 pub(crate) fn paint_caret(app: &mut WordApp, ui: &mut Ui, pass: &ToolPass, body: &PageBody<'_>, motion: MotionMode) {
     let ctx = ui.ctx().clone();
     let focused = app.canvas.focused(&ctx);
+    #[cfg(feature = "full")]
     crate::dialogs_smart_art::end_typing_run(app, focused);
     let doc = app.session.layout();
     let Some(pl) = place(app, &doc, body.pages) else { return };
@@ -184,10 +186,11 @@ pub(crate) fn paint_caret(app: &mut WordApp, ui: &mut Ui, pass: &ToolPass, body:
     };
     let ink = |app: &mut WordApp| caret_color_at(app, &doc, pl.page, pl.probe.0, pl.probe.1, zoom_key, dim_body);
 
-    let shown = pl.collapsed && focused;
+    let editable = !app.session.read_only();
+    let shown = editable && pl.collapsed && focused;
     let mut bars: Vec<(Bar, Color32)> = Vec::new();
     let mut composition = None;
-    if focused && !pl.in_equation && !app.canvas.ime_preedit.is_empty() {
+    if editable && focused && !pl.in_equation && !app.canvas.ime_preedit.is_empty() {
         // The caret is steady inside the composition, so the glide stands down while it shows.
         app.canvas.glide.reset();
         let text = app.canvas.ime_preedit.clone();
@@ -202,7 +205,7 @@ pub(crate) fn paint_caret(app: &mut WordApp, ui: &mut Ui, pass: &ToolPass, body:
             color: ink(app),
             typing: pl.typing,
         });
-    } else {
+    } else if editable {
         let look = step(app, request(pl.bar, shown));
         if shown && look.opacity > 0.0 {
             bars.push((look.bar, ink(app).gamma_multiply(look.opacity)));

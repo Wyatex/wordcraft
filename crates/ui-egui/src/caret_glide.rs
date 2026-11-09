@@ -361,6 +361,7 @@ fn cause_key(app: &WordApp) -> u64 {
     let s = &app.session;
     let mut h = std::collections::hash_map::DefaultHasher::new();
     (s.rev(), &s.sel.focus).hash(&mut h);
+    #[cfg(feature = "full")]
     if let Some(m) = &s.math {
         format!("{:?}", m.pos).hash(&mut h);
     }

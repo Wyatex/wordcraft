@@ -1,5 +1,7 @@
 use super::model::ClKind;
-use super::proof::{ProofRun, lang_at};
+use super::proof::ProofRun;
+#[cfg(feature = "proofing")]
+use super::proof::lang_at;
 use super::{ParaLayout, SOFT_HYPHEN};
 
 /// Word's default hyphenation zone (0.25"), points.
@@ -82,9 +84,13 @@ pub(super) fn hyphenation_points(
     caps: bool,
     runs: &[ProofRun],
 ) -> Vec<u32> {
+    #[cfg(feature = "proofing")]
     let mut bytes: Vec<usize> = text.char_indices().filter(|(_, c)| *c == SOFT_HYPHEN).map(|(i, c)| i + c.len_utf8()).collect();
+    #[cfg(not(feature = "proofing"))]
+    let bytes: Vec<usize> = text.char_indices().filter(|(_, c)| *c == SOFT_HYPHEN).map(|(i, c)| i + c.len_utf8()).collect();
     // Vietnamese words are single syllables and never take a hyphen: no automatic hyphenation in
     // a Vietnamese paragraph, nor in a word written with a Vietnamese-only letter (`Nguyễn`).
+    #[cfg(feature = "proofing")]
     if auto && !wordcraft_proof::vi::looks_vietnamese(text) {
         let lim = wordcraft_proof::hyphen::Limits::default();
         let mut start: Option<usize> = None;
@@ -118,6 +124,8 @@ pub(super) fn hyphenation_points(
             }
         }
     }
+    #[cfg(not(feature = "proofing"))]
+    let _ = (auto, caps, runs);
     let mut bytes: Vec<usize> = bytes.into_iter().filter_map(to_para).collect();
     if bytes.is_empty() {
         return Vec::new();

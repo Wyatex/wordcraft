@@ -1,4 +1,5 @@
 use super::pages::page_render_options;
+#[cfg(feature = "full")]
 use super::story::dims_body;
 use super::{Color32, DocLayout, Hash, Hasher, Pos, Pos2, WordApp};
 
@@ -69,6 +70,7 @@ pub(super) fn caret_color_at(
 
 /// The caret colour at page point (`x`, `y`) of page `page`, uncached: for a caret drawn while
 /// dragging, such as an inline picture's insertion cursor.
+#[cfg(feature = "full")]
 pub(crate) fn caret_color_on(app: &WordApp, layout: &DocLayout, page: usize, x: f32, y: f32) -> Color32 {
     let Some(p) = layout.pages.get(page) else { return Color32::BLACK };
     caret_contrast(wordcraft_render::background_at(&app.session.doc, p, &page_render_options(app, dims_body(app, layout)), x, y))

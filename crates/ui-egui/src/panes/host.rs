@@ -116,7 +116,11 @@ fn close(app: &mut WordApp, pane: Pane) {
         Some(id) => {
             let _ = app.run(id, json!({"value": false}));
         }
+        #[cfg(feature = "full")]
         None if pane == Pane::Proofing => app.spelling_review = None,
+        #[cfg(feature = "full")]
         None => app.restrict.open = false,
+        #[cfg(not(feature = "full"))]
+        None => {}
     }
 }

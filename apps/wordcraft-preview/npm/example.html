@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WordCraft Preview Modal Example</title>
+  <style>
+    :root { font: 14px system-ui, sans-serif; color-scheme: light; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: #f2f3f5; color: #20242a; }
+    body { padding: 32px; }
+    button { border: 1px solid #c8ccd2; border-radius: 6px; padding: 8px 12px; background: #fff; cursor: pointer; font: inherit; }
+    button:hover { border-color: #5578b8; }
+    #wordcraft_preview_canvas { display: block; width: 100%; height: 100%; }
+    #preview_modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 4vh 4vw; background: rgb(0 0 0 / 42%); }
+    #preview_modal[hidden] { display: none; }
+    .preview-dialog { width: min(1480px, 96vw); height: min(940px, 92vh); display: flex; flex-direction: column; overflow: hidden; background: #fff; border-radius: 10px; box-shadow: 0 12px 50px #0005; }
+    .preview-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; padding: 9px 14px; border-bottom: 1px solid #d0d4da; }
+    .preview-dialog-header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #modal_canvas_host { min-height: 0; flex: 1; background: #f2f3f5; }
+    #preview_modal .modal-canvas { width: 100% !important; height: 100% !important; }
+  </style>
+</head>
+<body>
+  <h1>WordCraft Preview</h1>
+  <p>选择文件后，预览会在弹窗中打开。WASM 运行仍只使用这个 canvas 实例。</p>
+  <p><button id="open_file" type="button">打开文档</button> <input id="file" type="file" hidden accept=".docx,.docm,.dotx,.dotm,.doc,.dot,.txt,.xml"></p>
+
+  <canvas id="wordcraft_preview_canvas"></canvas>
+  <div id="preview_modal" hidden role="dialog" aria-modal="true" aria-labelledby="preview_title">
+    <div class="preview-dialog">
+      <div class="preview-dialog-header">
+        <strong id="preview_title">WordCraft Preview</strong>
+        <button id="close_preview" type="button">关闭</button>
+      </div>
+      <div id="modal_canvas_host"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import init, { WordCraftPreview } from './dist/index.js';
+
+    const canvas = document.querySelector('#wordcraft_preview_canvas');
+    const modal = document.querySelector('#preview_modal');
+    const modalCanvasHost = document.querySelector('#modal_canvas_host');
+    const fileInput = document.querySelector('#file');
+    let preview;
+
+    await init();
+    preview = new WordCraftPreview();
+
+    const closePreview = () => {
+      document.body.appendChild(canvas);
+      canvas.classList.remove('modal-canvas');
+      modal.hidden = true;
+    };
+    const openPreview = file => {
+      modalCanvasHost.appendChild(canvas);
+      canvas.classList.add('modal-canvas');
+      document.querySelector('#preview_title').textContent = file.name;
+      modal.hidden = false;
+    };
+
+    document.querySelector('#open_file').onclick = () => fileInput.click();
+    fileInput.onchange = async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      try {
+        openPreview(file);
+        await preview.loadFile(file);
+      } catch (error) {
+        closePreview();
+        console.error('Could not load document:', error);
+      } finally {
+        fileInput.value = '';
+      }
+    };
+    document.querySelector('#close_preview').onclick = closePreview;
+    modal.onclick = event => { if (event.target === modal) closePreview(); };
+    document.addEventListener('keydown', event => { if (event.key === 'Escape' && !modal.hidden) closePreview(); });
+  </script>
+</body>
+</html>

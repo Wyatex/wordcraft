@@ -258,12 +258,17 @@ pub struct TypingWord {
 pub struct ProofOptions {
     /// Mark grammar errors as you type.
     pub grammar: bool,
+    #[cfg(feature = "proofing")]
     pub spelling: wordcraft_proof::Options,
 }
 
 impl Default for ProofOptions {
     fn default() -> Self {
-        ProofOptions { grammar: true, spelling: wordcraft_proof::Options::default() }
+        ProofOptions {
+            grammar: true,
+            #[cfg(feature = "proofing")]
+            spelling: wordcraft_proof::Options::default(),
+        }
     }
 }
 

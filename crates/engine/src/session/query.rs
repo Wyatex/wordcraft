@@ -168,6 +168,19 @@ impl Session {
         }
     }
 
+    /// Normalize a BCP-47 language tag using `wordcraft_proof` when proofing is enabled.
+    pub(crate) fn normalize_lang_tag(tag: &str) -> Option<String> {
+        #[cfg(feature = "proofing")]
+        {
+            wordcraft_proof::lang::normalize_tag(tag)
+        }
+        #[cfg(not(feature = "proofing"))]
+        {
+            let t = tag.trim();
+            (!t.is_empty()).then(|| t.to_string())
+        }
+    }
+
     /// The English of the region in effect (`en-GB` for a British region), or `None` when the
     /// region's language isn't English, it names no territory, or it is the United States (US
     /// English is the default anyway). An English interface writes new documents in it, as Word
@@ -176,7 +189,7 @@ impl Session {
         let r = self.region();
         (r.language == "en" && !r.territory.is_empty() && r.territory != "US")
             .then(|| format!("en-{}", r.territory))
-            .and_then(|t| wordcraft_proof::lang::normalize_tag(&t))
+            .and_then(|t| Self::normalize_lang_tag(&t))
     }
 
     /// The Spanish of the region in effect (`es-MX` on a Mexican system, `es-UY` on a Uruguayan
@@ -187,7 +200,7 @@ impl Session {
         let r = self.region();
         (matches!(r.language.as_str(), "es" | "spa") && !r.territory.is_empty())
             .then(|| format!("es-{}", r.territory))
-            .and_then(|t| wordcraft_proof::lang::normalize_tag(&t))
+            .and_then(|t| Self::normalize_lang_tag(&t))
             .unwrap_or_else(|| "es-ES".into())
     }
 
@@ -277,6 +290,7 @@ impl Session {
 
     /// Drop formatting Backspace carried over, wherever the caret is: it is for typing, and a
     /// paste is not typing, so pasted text takes the formatting where it lands (#6518).
+    #[cfg(feature = "editing")]
     pub(crate) fn forget_carried(&mut self) {
         if self.pending_at.take().is_some() {
             self.pending = None;

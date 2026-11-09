@@ -12,7 +12,7 @@ use wordcraft_doc::Document;
 use wordcraft_fonts::{FontDb, UserFont};
 use wordcraft_layout::DocLayout;
 
-use crate::cmd::insert::base64_decode;
+use crate::io::base64_decode;
 use crate::{CmdError, CmdResult, CommandSpec, Session, p};
 
 pub fn specs() -> Vec<CommandSpec> {
@@ -138,6 +138,7 @@ pub struct MissingFont {
     pub metric_compatible: bool,
     /// Its publisher's download page, when the publisher offers the font at no charge
     /// ([`wordcraft_fonts::download`]): installing it shows the document as it was written.
+    #[cfg(feature = "proofing")]
     pub download: Option<&'static wordcraft_fonts::download::FontDownload>,
 }
 
@@ -177,6 +178,7 @@ pub fn missing_fonts(doc: &Document, layout: &DocLayout) -> Vec<MissingFont> {
             // Judged by the name layout looked up, spaces and all: "Arial " isn't Arial to it, so
             // its text is in a substitute even where Arial is installed.
             metric_compatible: shown_as(doc, &recorded).is_some_and(|s| !warns(font, &s)),
+            #[cfg(feature = "proofing")]
             download: wordcraft_fonts::download::download_for(font),
         });
         if !m.shown_as.contains(&family) {
@@ -223,7 +225,11 @@ fn missing(s: &mut Session, _: &Value) -> CmdResult {
     let fonts: Vec<Value> = found
         .iter()
         .map(|f| {
+            #[cfg(feature = "proofing")]
             let mut font = json!({"font": f.font, "shownAs": f.shown_as, "metricCompatible": f.metric_compatible});
+            #[cfg(not(feature = "proofing"))]
+            let font = json!({"font": f.font, "shownAs": f.shown_as, "metricCompatible": f.metric_compatible});
+            #[cfg(feature = "proofing")]
             if let Some(d) = f.download {
                 font["download"] = json!({"name": d.name, "publisher": d.publisher, "url": d.url, "restricted": d.restricted});
             }

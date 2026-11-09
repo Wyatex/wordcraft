@@ -1095,3 +1095,40 @@ fn typing_boundary_keeps_duplicate_ids_across_stories_and_start_precedence() {
     // A start to the right wins over an end to the left.
     assert_eq!(typing_pos(&s, &Pos::body(0, 3)), Pos::body(0, 6));
 }
+
+#[test]
+fn preview_read_only_policy_blocks_edits_without_document_protection() {
+    let mut s = Session::new(Document::from_text("Preview text."));
+    s.set_read_only(true);
+    assert!(s.read_only());
+    let before = s.doc.plain_text(StoryRef::Body);
+    let rev = s.rev();
+    let dirty = s.dirty;
+
+    assert_eq!(s.why_disabled("text.insert"), Some("the preview session is read-only"));
+    assert!(s.run("text.insert", &json!({"text": " changed"})).is_err());
+    assert_eq!(s.why_disabled("edit.findReplace"), Some("the preview session is read-only"));
+    assert!(s.run("edit.findReplace", &json!({"text": "Preview", "with": "Changed"})).is_err());
+    assert_eq!(s.doc.plain_text(StoryRef::Body), before);
+    assert_eq!((s.rev(), s.dirty), (rev, dirty));
+    assert!(s.run("caret.end", &json!({})).is_ok(), "navigation remains available");
+    assert!(s.run("edit.goto", &json!({"page": 1})).is_ok(), "page navigation remains available");
+    assert!(s.run("view.zoom", &json!({"value": 125})).is_ok(), "view changes remain available");
+    assert!(s.run("font.loadSystem", &json!({})).is_ok(), "preview system-font loading remains available");
+
+    s.set_read_only(false);
+    assert!(!s.read_only());
+    assert!(s.why_disabled("text.insert").is_none());
+    s.run("text.insert", &json!({"text": " changed"})).unwrap();
+    let edited = s.doc.plain_text(StoryRef::Body);
+    assert!(edited.contains("changed"));
+    s.set_read_only(true);
+    let edited_rev = s.rev();
+    let edited_dirty = s.dirty;
+    assert!(s.run("text.insert", &json!({"text": " rejected"})).is_err());
+    assert_eq!(s.doc.plain_text(StoryRef::Body), edited);
+    assert_eq!((s.rev(), s.dirty), (edited_rev, edited_dirty));
+    s.set_read_only(false);
+    s.run("edit.undo", &json!({})).unwrap();
+    assert_eq!(s.doc.plain_text(StoryRef::Body), before, "a rejected command added no undo step");
+}

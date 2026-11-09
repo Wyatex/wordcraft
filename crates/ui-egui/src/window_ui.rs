@@ -13,20 +13,29 @@
 //! `swap_window` names every field, so a new field doesn't compile until it is classified.
 
 use crate::prefs::Prefs;
-use crate::{Status, WordApp, backstage, canvas, chrome, colors, dialogs, file_dialogs, format_shape, previews, print_page};
+use crate::{Status, canvas, chrome, dialogs, file_dialogs};
+#[cfg(feature = "full")]
+use crate::{WordApp, backstage, colors, format_shape, previews, print_page};
 
 /// A window's state while another window is drawn. Fields mirror their namesakes in [`WordApp`]
 /// and, for the ribbon tab and Backstage, in [`Prefs`].
 pub(crate) struct WindowUi {
     pub(crate) canvas: canvas::CanvasState,
+    #[cfg(feature = "full")]
     pub(crate) restrict: crate::restrict_pane::RestrictPane,
+    #[cfg(feature = "full")]
     pub(crate) spelling_review: Option<crate::proofing_pane::SpellingForm>,
     pub(crate) status: Option<Status>,
     /// Announcement belonging to this document window.
+    #[cfg(feature = "full")]
     pub(crate) announcement: Option<crate::announce::Announcement>,
+    #[cfg(feature = "full")]
     pub(crate) previews: previews::Previews,
+    #[cfg(feature = "full")]
     pub(crate) change_picture_target: Option<String>,
+    #[cfg(feature = "full")]
     pub(crate) recipient_list_pending: bool,
+    #[cfg(feature = "full")]
     pub(crate) ribbon_dropped: bool,
     pub(crate) nav_search_focus: bool,
     pub(crate) escape_free: bool,
@@ -36,26 +45,41 @@ pub(crate) struct WindowUi {
     pub(crate) missing_fonts: chrome::MissingFontsMemo,
     /// This window's refused or failed export, shown on its Export and Print pages (Backstage hides the status bar).
     pub(crate) export_error: String,
+    #[cfg(feature = "full")]
     pub(crate) last_autosave: f64,
+    #[cfg(feature = "full")]
     pub(crate) equation_prev_tab: Option<String>,
+    #[cfg(feature = "full")]
     pub(crate) smart_art_item: Option<usize>,
+    #[cfg(feature = "full")]
     pub(crate) outline_prev_tab: Option<String>,
+    #[cfg(feature = "full")]
     pub(crate) read_aloud_at: Option<wordcraft_engine::doc::Pos>,
     pub(crate) file_dialog: Option<file_dialogs::PendingDialog>,
     pub(crate) info_editing: Option<(&'static str, u64)>,
     pub(crate) shown_document: u64,
+    #[cfg(feature = "full")]
     pub(crate) backstage_state: backstage::BackstageState,
     pub(crate) chrome: chrome::ChromeOpen,
     pub(crate) dialog_host: craft::ui::dialog::DialogHost,
     pub(crate) dialog_hooks: Vec<(craft::ui::dialog::DialogId, dialogs::host::DialogHooks)>,
+    #[cfg(feature = "full")]
     pub(crate) dialog_answers: Vec<(craft::ui::dialog::DialogId, String, serde_json::Value)>,
+    #[cfg(feature = "full")]
     pub(crate) edits: craft::ui::edit::GestureHost<WordApp>,
+    #[cfg(feature = "full")]
     pub(crate) keytips_active: bool,
+    #[cfg(feature = "full")]
     pub(crate) options_state: craft::ui::patterns::preferences::PreferencesState,
+    #[cfg(feature = "full")]
     pub(crate) print: print_page::PrintPage,
+    #[cfg(feature = "full")]
     pub(crate) shape_variation: Option<format_shape::Variation>,
+    #[cfg(feature = "full")]
     pub(crate) equation_symbol_set: usize,
+    #[cfg(feature = "full")]
     pub(crate) md_source_visit: u64,
+    #[cfg(feature = "full")]
     pub(crate) more_colors: std::collections::HashMap<String, colors::Target>,
     // From Prefs.
     pub(crate) tab: String,
@@ -73,39 +97,61 @@ impl WindowUi {
         let Prefs { tab, backstage, backstage_page, nav_collapsed, .. } = Prefs::default();
         WindowUi {
             canvas: Default::default(),
+            #[cfg(feature = "full")]
             restrict: Default::default(),
+            #[cfg(feature = "full")]
             spelling_review: None,
             status: None,
+            #[cfg(feature = "full")]
             announcement: None,
+            #[cfg(feature = "full")]
             previews: Default::default(),
+            #[cfg(feature = "full")]
             change_picture_target: None,
+            #[cfg(feature = "full")]
             recipient_list_pending: false,
+            #[cfg(feature = "full")]
             ribbon_dropped: false,
             nav_search_focus: false,
             escape_free: false,
             status_counts: NOT_COUNTED,
             missing_fonts: Default::default(),
             export_error: String::new(),
+            #[cfg(feature = "full")]
             last_autosave: 0.0,
+            #[cfg(feature = "full")]
             equation_prev_tab: None,
+            #[cfg(feature = "full")]
             smart_art_item: None,
+            #[cfg(feature = "full")]
             outline_prev_tab: None,
+            #[cfg(feature = "full")]
             read_aloud_at: None,
             file_dialog: None,
             info_editing: None,
             shown_document: document,
+            #[cfg(feature = "full")]
             backstage_state: Default::default(),
             chrome: Default::default(),
             dialog_host: craft::ui::dialog::DialogHost::new(),
             dialog_hooks: Default::default(),
+            #[cfg(feature = "full")]
             dialog_answers: Default::default(),
+            #[cfg(feature = "full")]
             edits: Default::default(),
+            #[cfg(feature = "full")]
             keytips_active: false,
+            #[cfg(feature = "full")]
             options_state: Default::default(),
+            #[cfg(feature = "full")]
             print: Default::default(),
+            #[cfg(feature = "full")]
             shape_variation: None,
+            #[cfg(feature = "full")]
             equation_symbol_set: Default::default(),
+            #[cfg(feature = "full")]
             md_source_visit: 0,
+            #[cfg(feature = "full")]
             more_colors: Default::default(),
             tab,
             backstage,
@@ -118,6 +164,7 @@ impl WindowUi {
 /// Swap each named field of the drawn window (bound by the caller's destructuring) with its
 /// namesake in the [`WindowUi`]. The `WindowUi` pattern is exhaustive, so a field added there
 /// and left out here doesn't compile.
+#[cfg(feature = "full")]
 macro_rules! swap_fields {
     ($w:ident: $($(#[$attr:meta])* $field:ident),* $(,)?) => {
         let WindowUi { $($(#[$attr])* $field: _),* } = &*$w;
@@ -125,6 +172,7 @@ macro_rules! swap_fields {
     };
 }
 
+#[cfg(feature = "full")]
 impl WordApp {
     /// Exchange the drawn window's state with `w`'s: afterwards the app draws the window `w`
     /// held, and `w` holds the one that was drawn. App-wide and per-document state stays. The
@@ -135,11 +183,13 @@ impl WordApp {
         let WordApp {
             // App-wide.
             // A close operation walks every window's documents, so it outlives a window swap.
-            closing: _,
+            #[cfg(feature = "full")]
+                closing: _,
             session: _,
             services: _,
             host: _,
-            settings: _,
+            #[cfg(feature = "full")]
+                settings: _,
             settings_notices: _,
             command_catalog: _,
             command_catalog_mac: _,
@@ -147,19 +197,29 @@ impl WordApp {
             key_overrides: _,
             command_states: _,
             command_states_cache: _,
-            keytip_cache: _,
+            #[cfg(feature = "full")]
+                keytip_cache: _,
             fonts_frames: _,
-            printing: _,
-            print_feedback_seen: _,
-            print_gen: _,
+            #[cfg(feature = "full")]
+                printing: _,
+            #[cfg(feature = "full")]
+                print_feedback_seen: _,
+            #[cfg(feature = "full")]
+                print_gen: _,
             font_generation: _,
-            updates_rt: _,
-            font_notice_seen: _,
-            font_notices: _,
-            packs_rt: _,
+            #[cfg(feature = "full")]
+                updates_rt: _,
+            #[cfg(feature = "full")]
+                font_notice_seen: _,
+            #[cfg(feature = "full")]
+                font_notices: _,
+            #[cfg(feature = "full")]
+                packs_rt: _,
             // The control channel's screenshots and input go to the active window, whichever it is.
-            control: _,
-            capture_token: _,
+            #[cfg(feature = "full")]
+                control: _,
+            #[cfg(feature = "full")]
+                capture_token: _,
             fallback_chooser: _,
             // The current command's origin, set and cleared around it.
             ime_origin: _,
@@ -171,14 +231,24 @@ impl WordApp {
             frame_ms: _,
             quit_requested: _,
             autosave: _,
-            zotero: _,
+            show_file_tab: _,
+            show_autosave: _,
+            show_title_bar: _,
+            show_document_actions: _,
+            show_ribbon: _,
+            #[cfg(feature = "full")]
+                zotero: _,
             ctx: _,
-            read_aloud_error: _,
-            saves_in_flight: _,
+            #[cfg(feature = "full")]
+                read_aloud_error: _,
+            #[cfg(feature = "full")]
+                saves_in_flight: _,
             recovery_seen: _,
             no_document: _,
-            windows: _,
-            print_document: _,
+            #[cfg(feature = "full")]
+                windows: _,
+            #[cfg(feature = "full")]
+                print_document: _,
             clipboard_published: _,
             // Per document: the shown document's, swapped with `parked` on a document switch.
             autosave_path: _,
@@ -186,13 +256,20 @@ impl WordApp {
             // Per window.
             ui,
             canvas,
+            #[cfg(feature = "full")]
             restrict,
+            #[cfg(feature = "full")]
             spelling_review,
             status,
+            #[cfg(feature = "full")]
             announcement,
+            #[cfg(feature = "full")]
             previews,
+            #[cfg(feature = "full")]
             change_picture_target,
+            #[cfg(feature = "full")]
             recipient_list_pending,
+            #[cfg(feature = "full")]
             ribbon_dropped,
             nav_search_focus,
             escape_free,
@@ -200,25 +277,38 @@ impl WordApp {
             missing_fonts,
             export_error,
             last_autosave,
+            #[cfg(feature = "full")]
             equation_prev_tab,
+            #[cfg(feature = "full")]
             smart_art_item,
+            #[cfg(feature = "full")]
             outline_prev_tab,
+            #[cfg(feature = "full")]
             read_aloud_at,
             file_dialog,
             info_editing,
             shown_document,
+            #[cfg(feature = "full")]
             backstage_state,
             chrome,
             dialog_host,
             dialog_hooks,
             dialog_answers,
+            #[cfg(feature = "full")]
             edits,
+            #[cfg(feature = "full")]
             keytips_active,
+            #[cfg(feature = "full")]
             options_state,
+            #[cfg(feature = "full")]
             print,
+            #[cfg(feature = "full")]
             shape_variation,
+            #[cfg(feature = "full")]
             equation_symbol_set,
+            #[cfg(feature = "full")]
             md_source_visit,
+            #[cfg(feature = "full")]
             more_colors,
         } = self;
         let Prefs {
@@ -227,12 +317,14 @@ impl WordApp {
             ribbon_collapsed: _,
             quick_access_toolbar: _,
             recent: _,
-            recent_symbols: _,
+            #[cfg(feature = "full")]
+                recent_symbols: _,
             date_time_format: _,
             date_time_language: _,
             date_time_update: _,
             recent_colors: _,
-            font_picker: _,
+            #[cfg(feature = "full")]
+                font_picker: _,
             theme: _,
             interface_size: _,
             legacy_interface_size: _,
@@ -255,11 +347,14 @@ impl WordApp {
             check_spelling: _,
             caret_animation: _,
             keyboard: _,
-            print: _,
-            ribbon: _,
+            #[cfg(feature = "full")]
+                print: _,
+            #[cfg(feature = "full")]
+                ribbon: _,
             caption_labels: _,
             last_caption_label: _,
-            ink_pens: _,
+            #[cfg(feature = "full")]
+                ink_pens: _,
             initials: _,
             options_pane: _,
             recent_count: _,
@@ -284,13 +379,20 @@ impl WordApp {
         } = ui;
         swap_fields!(w:
             canvas,
+            #[cfg(feature = "full")]
             restrict,
+            #[cfg(feature = "full")]
             spelling_review,
             status,
+            #[cfg(feature = "full")]
             announcement,
+            #[cfg(feature = "full")]
             previews,
+            #[cfg(feature = "full")]
             change_picture_target,
+            #[cfg(feature = "full")]
             recipient_list_pending,
+            #[cfg(feature = "full")]
             ribbon_dropped,
             nav_search_focus,
             escape_free,
@@ -298,25 +400,38 @@ impl WordApp {
             missing_fonts,
             export_error,
             last_autosave,
+            #[cfg(feature = "full")]
             equation_prev_tab,
+            #[cfg(feature = "full")]
             smart_art_item,
+            #[cfg(feature = "full")]
             outline_prev_tab,
+            #[cfg(feature = "full")]
             read_aloud_at,
             file_dialog,
             info_editing,
             shown_document,
+            #[cfg(feature = "full")]
             backstage_state,
             chrome,
             dialog_host,
             dialog_hooks,
             dialog_answers,
+            #[cfg(feature = "full")]
             edits,
+            #[cfg(feature = "full")]
             keytips_active,
+            #[cfg(feature = "full")]
             options_state,
+            #[cfg(feature = "full")]
             print,
+            #[cfg(feature = "full")]
             shape_variation,
+            #[cfg(feature = "full")]
             equation_symbol_set,
+            #[cfg(feature = "full")]
             md_source_visit,
+            #[cfg(feature = "full")]
             more_colors,
             tab,
             backstage,
@@ -327,10 +442,12 @@ impl WordApp {
         // window's: it stays through the swap, and `carry_document_state` parks it with its document and brings back the
         // arriving one's, as production did with its app-wide drafts. Swapped with the canvas, the switch would park the
         // arriving window's state under the document that left.
+        #[cfg(feature = "full")]
         std::mem::swap(&mut canvas.comments, &mut w.canvas.comments);
     }
 }
 
+#[cfg(feature = "full")]
 #[cfg(test)]
 mod tests {
     use serde_json::json;

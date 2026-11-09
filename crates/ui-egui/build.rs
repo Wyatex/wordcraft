@@ -10,44 +10,55 @@
 //!
 //! - `CRAFT_I18N_DIR`, a craft-i18n checkout (storytold/craft-i18n, at the SHA in
 //!   `craft-i18n.rev`): `craft_i18n.rs` holds `CRAFT_I18N`, one (locale, shared catalog, WordCraft
-//!   catalog) entry per locale that has a `wordcraft.tsv`. Unset, or not a checkout (a warning),
-//!   it is empty and the interface is English only; with `CRAFT_I18N_REQUIRED=1` (releases) that
-//!   is an error instead. Recipe: craft-i18n's `docs/integration.md`.
+//!   catalog) entry per locale that has a `wordcraft.tsv`. When the variable is unset, a checkout
+//!   next to the WordCraft repository (`../craft-i18n`) is used when present. If neither location
+//!   is available (a warning), it is empty and the interface is English only; with
+//!   `CRAFT_I18N_REQUIRED=1` (releases) that is an error instead. Recipe: craft-i18n's
+//!   `docs/integration.md`.
 
 use std::fmt::Write as _;
 
 use serde_json::Value;
 
 fn main() {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../contributors");
-    let json = read(&dir.join("contributors.json"), "the About window shows no contributors", |t| {
-        serde_json::from_str::<Value>(t).map_err(|e| e.to_string())
-    })
-    .unwrap_or(Value::Null);
-    let people = read(&dir.join("people.toml"), "contributors are shown by username only", |t| t.parse::<toml::Table>().map_err(|e| e.to_string()))
-        .unwrap_or_default();
+    let full = std::env::var_os("CARGO_FEATURE_FULL").is_some();
+    let all_languages = std::env::var_os("CARGO_FEATURE_ALL_LANGUAGES").is_some();
     let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap_or_default()).join("credits.rs");
-    if let Err(e) = std::fs::write(&out, generate(&json, &people)) {
+    let credits_src = if full {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../contributors");
+        let json = read(&dir.join("contributors.json"), "the About window shows no contributors", |t| {
+            serde_json::from_str::<Value>(t).map_err(|e| e.to_string())
+        })
+        .unwrap_or(Value::Null);
+        let people =
+            read(&dir.join("people.toml"), "contributors are shown by username only", |t| t.parse::<toml::Table>().map_err(|e| e.to_string()))
+                .unwrap_or_default();
+        generate(&json, &people)
+    } else {
+        "pub static TOTAL_COMMITS: u64 = 0;\npub static CONTRIBUTORS: &[Contributor] = &[];\npub static MODELS: &[Model] = &[];\n".to_string()
+    };
+    if let Err(e) = std::fs::write(&out, credits_src) {
         println!("cargo::warning=writing {}: {e}", out.display());
     }
-    let (table, catalogs) = craft_i18n();
+    let (table, catalogs) = craft_i18n(all_languages);
     let out = out.with_file_name("craft_i18n.rs");
     if let Err(e) = std::fs::write(&out, table) {
         println!("cargo::error=writing {}: {e}", out.display());
     }
-    embed_fonts(catalogs);
+    embed_fonts(catalogs, all_languages);
 }
 
 /// Write `craft_fonts.rs`: the craft-fonts faces (from `CRAFT_FONTS_DIR`) with the CJK interface faces
 /// cut to the characters of the embedded catalogs. A web build has a size budget, so it embeds only
-/// the Japanese interface face.
-fn embed_fonts(catalogs: Vec<std::path::PathBuf>) {
+/// the Japanese interface face (or Simplified Chinese in slim builds).
+fn embed_fonts(catalogs: Vec<std::path::PathBuf>, all_languages: bool) {
     println!("cargo::rerun-if-changed=build.rs");
     let wasm = craft_fonts_build::target_is_wasm();
-    // The web build embeds only the cut Japanese interface face, which needs a craft-fonts checkout whose
+    // The web build embeds only the cut CJK interface face, which needs a craft-fonts checkout whose
     // manifest marks interface faces (`role` `ui`); with an older one it embeds none and falls back to the
     // Latin faces, so `CRAFT_FONTS_REQUIRED` binds the native build only.
-    let embed = craft_fonts_build::Embed::new().subset_to(catalogs).filter(move |face| !wasm || face.has_script("Jpan"));
+    let script = if all_languages { "Jpan" } else { "Hans" };
+    let embed = craft_fonts_build::Embed::new().subset_to(catalogs).filter(move |face| !wasm || face.has_script(script));
     let embed = if wasm { embed.required(false) } else { embed };
     let embedded = embed.write("craft_fonts.rs");
     if let Err(e) = embedded {
@@ -60,13 +71,16 @@ const APP_CATALOG: &str = "wordcraft.tsv";
 
 /// `CRAFT_I18N` from `CRAFT_I18N_DIR`: the `Embedded` list the craft-i18n crate reads, and the
 /// catalog files it names (`wordcraft.tsv` and `common.tsv`).
-fn craft_i18n() -> (String, Vec<std::path::PathBuf>) {
+fn craft_i18n(all_languages: bool) -> (String, Vec<std::path::PathBuf>) {
     println!("cargo::rerun-if-env-changed=CRAFT_I18N_DIR");
     println!("cargo::rerun-if-env-changed=CRAFT_I18N_REQUIRED");
     let required = std::env::var("CRAFT_I18N_REQUIRED").is_ok_and(|v| v.trim() == "1");
-    let entries = match std::env::var_os("CRAFT_I18N_DIR").filter(|d| !d.is_empty()) {
+    let configured = std::env::var_os("CRAFT_I18N_DIR").filter(|d| !d.is_empty());
+    let sibling = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../craft-i18n");
+    let dir = configured.or_else(|| sibling.join("locales").is_dir().then(|| sibling.clone().into_os_string()));
+    let entries = match dir {
         // Not canonicalized: on Windows that gives `\\?\C:\…`, which `include_str!` can't read.
-        Some(dir) => match locales(&std::path::PathBuf::from(dir).join("locales")) {
+        Some(dir) => match locales(&std::path::PathBuf::from(dir).join("locales"), all_languages) {
             Ok(entries) => entries,
             Err(e) => {
                 let level = if required { "error" } else { "warning" };
@@ -76,7 +90,9 @@ fn craft_i18n() -> (String, Vec<std::path::PathBuf>) {
         },
         None => {
             if required {
-                println!("cargo::error=CRAFT_I18N_REQUIRED=1 but CRAFT_I18N_DIR is unset: a release must embed the translations");
+                println!(
+                    "cargo::error=CRAFT_I18N_REQUIRED=1 but CRAFT_I18N_DIR is unset and ../craft-i18n is unavailable: a release must embed the translations"
+                );
             }
             Vec::new()
         }
@@ -100,7 +116,7 @@ type Locale = (String, Option<std::path::PathBuf>, std::path::PathBuf);
 
 /// Every locale under `dir` with this app's catalog, by code: (code, its `common.tsv` if any, its
 /// app catalog). An error when `dir` isn't a craft-i18n `locales/` directory.
-fn locales(dir: &std::path::Path) -> Result<Vec<Locale>, String> {
+fn locales(dir: &std::path::Path, all_languages: bool) -> Result<Vec<Locale>, String> {
     // Build scripts run in the crate's directory and `include_str!` resolves against `OUT_DIR`, so
     // a relative path would mean two different places.
     if !dir.is_absolute() {
@@ -112,6 +128,9 @@ fn locales(dir: &std::path::Path) -> Result<Vec<Locale>, String> {
     for entry in list.flatten() {
         let path = entry.path();
         let Some(code) = path.file_name().and_then(std::ffi::OsStr::to_str).map(str::to_string) else { continue };
+        if !all_languages && code != "zh-hans" {
+            continue;
+        }
         let app = path.join(APP_CATALOG);
         if !app.is_file() {
             continue;

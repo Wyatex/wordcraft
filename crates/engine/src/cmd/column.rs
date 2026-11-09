@@ -162,6 +162,7 @@ pub(crate) fn dispatch(s: &mut Session, id: &str, mutates: bool, run: fn(&mut Se
     }
     // Backspace over whole rows, whole columns or the whole table deletes them, as in Word
     // (Delete only clears them, as for any other cells).
+    #[cfg(feature = "editing")]
     if id == "text.backspace"
         && let Some(r) = super::table::backspace_cells(s)
     {
@@ -169,6 +170,7 @@ pub(crate) fn dispatch(s: &mut Session, id: &str, mutates: bool, run: fn(&mut Se
     }
     // Delete (and Backspace that doesn't delete them) empties whole cells to one paragraph each,
     // as in Word (#2802).
+    #[cfg(feature = "editing")]
     if matches!(id, "text.delete" | "text.backspace" | "text.deleteWordBack" | "text.deleteWordForward")
         && let Some(r) = super::table::clear_cells(s)
     {
@@ -183,18 +185,22 @@ pub(crate) fn dispatch(s: &mut Session, id: &str, mutates: bool, run: fn(&mut Se
         // Copy and Cut of whole cells take a table of them (#1744).
         "edit.copy" | "edit.cut" if cells => run(s, v),
         "edit.copy" => copy(s, &segs),
+        #[cfg(feature = "editing")]
         "edit.cut" => {
             let r = copy(s, &segs)?;
             delete(s, &segs)?;
             Ok(r)
         }
+        #[cfg(feature = "editing")]
         "text.delete" | "text.backspace" | "text.deleteWordBack" | "text.deleteWordForward" => {
             delete(s, &segs)?;
             super::sel_result(s)
         }
+        #[cfg(feature = "editing")]
         "format.changeCase" | "format.clear" | "format.resetChar" => per_row(s, run, v, &segs),
         _ if id.starts_with("format.") || id.starts_with("para.") || id == "select.column" => run(s, v),
         // Pasting formatting (the format painter) leaves the text alone.
+        #[cfg(feature = "editing")]
         _ if mutates && (id.starts_with("text.") || (id.starts_with("edit.paste") && id != "edit.pasteFormat")) => {
             delete(s, &segs)?;
             run(s, v)
@@ -239,6 +245,7 @@ fn copy(s: &mut Session, segs: &[(Pos, Pos)]) -> CmdResult {
 
 /// Delete each row's piece (bottom up, so earlier positions stay valid) and leave the caret at
 /// the block's top-left corner.
+#[cfg(feature = "editing")]
 fn delete(s: &mut Session, segs: &[(Pos, Pos)]) -> Result<(), CmdError> {
     for (a, b) in segs.iter().rev() {
         let (a, b) = (s.doc.clamp(a), s.doc.clamp(b));
@@ -261,6 +268,7 @@ fn delete(s: &mut Session, segs: &[(Pos, Pos)]) -> Result<(), CmdError> {
 }
 
 /// Run a selection command once per non-empty row, then restore the block.
+#[cfg(feature = "editing")]
 fn per_row(s: &mut Session, run: fn(&mut Session, &Value) -> CmdResult, v: &Value, segs: &[(Pos, Pos)]) -> CmdResult {
     let block = s.column.take();
     for (a, b) in segs.iter().rev() {

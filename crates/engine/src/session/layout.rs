@@ -25,11 +25,18 @@ impl Session {
         // a view change that moves them in or out of the text lays it out again.
         let hide_deleted = !self.view.show_markup;
         let deleted = (hide_deleted, self.prefs.markup.hidden_deletions(), self.revisions_in_balloons());
+        #[cfg(feature = "editing")]
         let outline = (mode == ViewMode::Outline).then(|| self.view.outline.view());
+        #[cfg(not(feature = "editing"))]
+        let outline = None;
         let shown = (self.view.marks || self.prefs.marks.hidden, self.view.field_codes);
         // A dictionary or Language pack installed, removed or edited (in this document's window or
         // any other) proofs it again, open or parked.
-        let rev = (self.rev, wordcraft_proof::dictionary_generation());
+        #[cfg(feature = "proofing")]
+        let dict_gen = wordcraft_proof::dictionary_generation();
+        #[cfg(not(feature = "proofing"))]
+        let dict_gen = 0u64;
+        let rev = (self.rev, dict_gen);
         let (proofing, numeral) = (self.view.proofing, self.view.numeral);
         let fits = |e: &Option<LayoutEntry>| {
             e.as_ref().is_some_and(|(r, w, h, m, sp, _, pf, o, hd, n, t, sh)| {
@@ -70,7 +77,11 @@ impl Session {
             comment_balloons: false,
             field_codes: shown.1,
             outline: outline.clone(),
-            proof: wordcraft_layout::ProofOptions { grammar: self.prefs.mark_grammar, spelling: self.prefs.spelling() },
+            proof: wordcraft_layout::ProofOptions {
+                grammar: self.prefs.mark_grammar,
+                #[cfg(feature = "proofing")]
+                spelling: self.prefs.spelling(),
+            },
             typing_word: typing,
             filename: filename.clone(),
             filepath: filepath.clone(),
@@ -181,7 +192,10 @@ impl Session {
 
     /// The print-view layout for output; `final_text` leaves tracked deletions out.
     fn output_layout(&self, markup: bool, final_text: bool) -> Arc<DocLayout> {
+        #[cfg(feature = "editing")]
         let out = crate::cmd::references::output_fields(&self.doc);
+        #[cfg(not(feature = "editing"))]
+        let out: Option<Document> = None;
         self.output_layout_of(out.as_ref().unwrap_or(&self.doc), markup, final_text)
     }
 
@@ -216,12 +230,7 @@ impl Session {
     /// the saved proofing default, or the interface language when none is saved. Nothing else
     /// changes and no undo step is added.
     pub fn set_editing_language(&mut self, tag: Option<&str>) {
-        let tag = self
-            .prefs
-            .default_language
-            .as_deref()
-            .and_then(wordcraft_proof::lang::normalize_tag)
-            .or_else(|| tag.and_then(wordcraft_proof::lang::normalize_tag));
+        let tag = self.prefs.default_language.as_deref().and_then(Self::normalize_lang_tag).or_else(|| tag.and_then(Self::normalize_lang_tag));
         if self.editing_lang == tag {
             return;
         }

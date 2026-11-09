@@ -5,10 +5,13 @@ use super::{Document, Session, StoryRef, next_document_id};
 impl Session {
     /// Replace the document (open/new).
     pub fn set_document(&mut self, doc: Document) {
-        self.autocap = None;
+        #[cfg(feature = "editing")]
+        {
+            self.autocap = None;
+            self.md_source = None;
+            self.md_file = Default::default();
+        }
         let replaced = self.document_id;
-        self.md_source = None;
-        self.md_file = Default::default();
         self.document_id = next_document_id();
         if let Some(at) = self.order.iter_mut().find(|d| **d == replaced) {
             *at = self.document_id;
@@ -20,13 +23,19 @@ impl Session {
         self.password = None;
         self.file_name = None;
         // The old document's equation is gone: its editing session cannot carry over.
-        self.math = None;
+        #[cfg(feature = "math")]
+        {
+            self.math = None;
+        }
         self.sel = Selection::caret(self.doc.start_of(StoryRef::Body));
         self.pending = None;
         self.pending_at = None;
         self.typing = None;
         self.also_selected.clear();
-        self.member = None;
+        #[cfg(feature = "editing")]
+        {
+            self.member = None;
+        }
         self.column = None;
         self.column_mode = false;
         self.widened = None;
@@ -34,10 +43,11 @@ impl Session {
         self.new_header_parts.clear();
         self.hf_return = None;
         self.go_back_step = 0;
+        #[cfg(feature = "editing")]
         self.view.outline.collapsed.clear();
         self.view.follow_prefs(&self.prefs);
         // A copy the replaced document kept stays in the recovery list.
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(all(feature = "editing", not(target_arch = "wasm32")))]
         {
             self.recovery_slot = Default::default();
         }
@@ -70,6 +80,7 @@ impl Session {
     pub fn edit_snapshot(&self) -> EditSnapshot {
         let Session {
             doc,
+            read_only: _,
             sel,
             view: _,
             pending,
@@ -83,7 +94,8 @@ impl Session {
             dirty,
             clipboard: _,
             // Like the clipboard: what the next paste can make a move of.
-            pending_move: _,
+            #[cfg(feature = "editing")]
+                pending_move: _,
             clipboard_text: _,
             clipboard_html: _,
             clipboard_rtf: _,
@@ -101,7 +113,8 @@ impl Session {
             new_header_parts: _,
             hf_return: _,
             // Which navigated style change Accept/Reject acts on: it checks the selection itself.
-            review_style: _,
+            #[cfg(feature = "editing")]
+                review_style: _,
             history,
             undo_evicted,
             redo,
@@ -110,17 +123,22 @@ impl Session {
             equation_join_next,
             ime_text_join,
             join_anchor,
-            autocap: _,
+            #[cfg(feature = "editing")]
+                autocap: _,
             rev: _,
-            protect_facts: _,
+            #[cfg(feature = "editing")]
+                protect_facts: _,
             cache: _,
             layout: _,
             // The word being typed, like `column`: valid only while `sel` is where typing left it.
             typing: _,
             originals: _,
-            md_source: _,
-            md_file: _,
-            picture_looks: _,
+            #[cfg(feature = "editing")]
+                md_source: _,
+            #[cfg(feature = "editing")]
+                md_file: _,
+            #[cfg(feature = "editing")]
+                picture_looks: _,
             last_command: _,
             recording: _,
             macros: _,
@@ -128,7 +146,8 @@ impl Session {
             building_blocks: _,
             autosave: _,
             bib_style: _,
-            merge: _,
+            #[cfg(feature = "editing")]
+                merge: _,
             ui_requests: _,
             document_id: _,
             // The untitled name and when the document was made: not edits.
@@ -148,7 +167,8 @@ impl Session {
                 ime_state_exhausted: _,
             pending_ime_application_change: _,
             ime_origin: _,
-            read_aloud: _,
+            #[cfg(feature = "editing")]
+                read_aloud: _,
             // The other windows, like `view`: not part of the document or its history.
             windows: _,
             prefs: _,
@@ -156,21 +176,25 @@ impl Session {
             keymap: _,
             // Derived from `document_id` and `rev`: rebuilt on the next read, not an edit.
             findings: _,
-            ribbon: _,
+            #[cfg(feature = "editing")]
+                ribbon: _,
             // A preference for new documents, like `prefs`: not part of this document.
             editing_lang: _,
             // Equation editing mode, like `view`: not part of the document or its history.
-            math: _,
-            math_latex: _,
+            #[cfg(feature = "math")]
+                math: _,
+            #[cfg(feature = "math")]
+                math_latex: _,
             math_normal_text: _,
             // The save password, like the file path: not an edit to the document.
             password: _,
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "editing", not(target_arch = "wasm32")))]
                 recovery: _,
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "editing", not(target_arch = "wasm32")))]
                 recovery_slot: _,
             also_selected: _,
-            member: _,
+            #[cfg(feature = "editing")]
+                member: _,
             // Column selection and a widened selection's ends, like `sel`'s shape: valid only while
             // `sel` matches them.
             column: _,
@@ -227,13 +251,19 @@ impl Session {
             self.history.splice(0..0, head.into_iter().take(back));
         }
         self.undo_evicted = evicted;
-        self.autocap = None;
+        #[cfg(feature = "editing")]
+        {
+            self.autocap = None;
+        }
         self.doc = doc;
         self.sel = sel;
         self.pending = pending;
         self.pending_at = pending_at;
         self.also_selected.clear();
-        self.member = None;
+        #[cfg(feature = "editing")]
+        {
+            self.member = None;
+        }
         self.history.truncate(history_len);
         self.redo = redo;
         self.typing_open = typing_open;
@@ -251,6 +281,7 @@ impl Session {
         self.sel.anchor = self.doc.clamp(&self.sel.anchor);
         self.sel.focus = self.doc.clamp(&self.sel.focus);
         // The equation being edited must still be there (undo, edits elsewhere).
+        #[cfg(feature = "math")]
         if let Some(m) = &self.math {
             let eq = self.doc.para_at(&m.at).and_then(|p| match p.object_at(m.at.off) {
                 Some(wordcraft_doc::InlineObject::Equation { math, .. }) => Some(wordcraft_doc::math_edit::clamp(&math.nodes, &m.pos)),
@@ -271,9 +302,19 @@ impl Session {
     /// Restrict Editing refuses outright. `None` when it can run (or doesn't exist).
     pub fn why_disabled(&self, id: &str) -> Option<&'static str> {
         let spec = self.registry.get(id)?;
-        (spec.enabled)(self)
-            .or_else(|| crate::cmd::md_source::refusal(self, id, spec.mutates))
-            .or_else(|| if spec.mutates { crate::cmd::protect::greyed_out(self, id, || self.protect_facts()) } else { None })
+        if self.read_only && !super::run::allowed_in_read_only(id) {
+            return Some("the preview session is read-only");
+        }
+        #[cfg(feature = "editing")]
+        {
+            (spec.enabled)(self)
+                .or_else(|| crate::cmd::md_source::refusal(self, id, spec.mutates))
+                .or_else(|| if spec.mutates { crate::cmd::protect::greyed_out(self, id, || self.protect_facts()) } else { None })
+        }
+        #[cfg(not(feature = "editing"))]
+        {
+            (spec.enabled)(self)
+        }
     }
 
     /// Put the revision back to `rev` after a command that changed nothing or failed. What the
@@ -292,13 +333,17 @@ impl Session {
         if self.find.highlights.as_ref().is_some_and(|(r, _)| *r != rev) {
             self.find.highlights = None;
         }
-        let facts = self.protect_facts.get_mut().unwrap_or_else(std::sync::PoisonError::into_inner);
-        if facts.as_ref().is_some_and(|((_, r, _), _)| *r != rev) {
-            *facts = None;
+        #[cfg(feature = "editing")]
+        {
+            let facts = self.protect_facts.get_mut().unwrap_or_else(std::sync::PoisonError::into_inner);
+            if facts.as_ref().is_some_and(|((_, r, _), _)| *r != rev) {
+                *facts = None;
+            }
         }
     }
 
     /// [`crate::cmd::protect::Facts`] for the document as it is now, cached per revision.
+    #[cfg(feature = "editing")]
     fn protect_facts(&self) -> crate::cmd::protect::Facts {
         let key = (self.document_id, self.rev, self.author.clone());
         let mut cache = self.protect_facts.lock().unwrap_or_else(std::sync::PoisonError::into_inner);

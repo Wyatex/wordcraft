@@ -9,6 +9,10 @@ description = "WordCraft fonts: font database (bundled OFL + system), metrics, g
 workspace = true
 
 [features]
+default = ["math", "download", "all-fonts"]
+math = []
+download = []
+all-fonts = []
 # Opt-in test harness support; enabling this alone never changes the application database.
 test-support = []
 

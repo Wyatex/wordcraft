@@ -9,6 +9,7 @@ impl Session {
 
     /// Set the effect classification from a command handler. [`Session::run`] fills
     /// `selection_changed` and enforces the content/state invariant after the command.
+    #[cfg(feature = "editing")]
     pub(crate) fn set_ime_edit_outcome(&mut self, outcome: ImeEditOutcome) {
         self.ime_edit_outcome = outcome;
     }
@@ -41,10 +42,11 @@ impl Session {
     /// Returns the caret identity used for IME state revisions: the equation session and position
     /// while editing, otherwise the body selection.
     pub(super) fn current_ime_caret_state(&self) -> ImeCaretState {
-        match &self.math {
-            Some(m) => ImeCaretState::Equation { session: m.session, pos: m.pos.clone() },
-            None => ImeCaretState::Body(self.sel.clone()),
+        #[cfg(feature = "math")]
+        if let Some(m) = &self.math {
+            return ImeCaretState::Equation { session: m.session, pos: m.pos.clone() };
         }
+        ImeCaretState::Body(self.sel.clone())
     }
 
     /// Allocate the next IME state revision, or store `None` when the allocator is exhausted.

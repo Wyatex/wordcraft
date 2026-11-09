@@ -1,12 +1,17 @@
-use super::{Status, WordApp, canvas, chrome, documents, panes, read_aloud, ribbon, updates_ui, zotero};
+use super::{Status, WordApp, canvas, chrome, documents, panes};
+#[cfg(feature = "full")]
+use super::{read_aloud, ribbon, updates_ui, zotero};
 use craft::platform::clock::monotonic_ms;
 use craft::theme::variant::Tone;
 use craft::ui::bars::StatusMessage;
 use craft::ui::contract::Bind;
 use craft::ui::runtime::env::ShellRegions;
-use craft::ui::shell::{AppShell, ScreenModeSet, Slot, SlotSize};
+use craft::ui::shell::{AppShell, ScreenModeSet};
+#[cfg(feature = "full")]
+use craft::ui::shell::{Slot, SlotSize};
 
 use crate::i18n;
+#[cfg(feature = "full")]
 use crate::language_packs;
 
 /// How long the status bar shows a message, in milliseconds.
@@ -66,7 +71,11 @@ impl WordApp {
     /// Tell the host whether the document has unsaved changes ([`Services::on_dirty`]).
     pub(super) fn report_dirty(&self) {
         if let Some(f) = &self.services.on_dirty {
-            f(self.session.dirty || panes::has_comment_drafts(self));
+            #[cfg(feature = "full")]
+            let dirty = self.session.dirty || panes::has_comment_drafts(self);
+            #[cfg(not(feature = "full"))]
+            let dirty = self.session.dirty;
+            f(dirty);
         }
     }
 
@@ -75,53 +84,84 @@ impl WordApp {
     /// handed in as values and read back after, so no body reads a stale copy. Returns the
     /// shell's regions; a window another command swapped in mid-draw returns none.
     pub(super) fn paint_window(&mut self, ui: &mut egui::Ui) -> ShellRegions {
+        #[cfg(feature = "full")]
         crate::announce::expose(self, ui.ctx());
+        #[cfg(feature = "full")]
         let window = self.windows.shown();
+        #[cfg(feature = "full")]
         let stale = |app: &WordApp| app.windows.shown() != window;
+        #[cfg(not(feature = "full"))]
+        let stale = |_app: &WordApp| false;
         let mode = self.screen_mode();
+        #[cfg(feature = "full")]
         let dropped = self.ribbon_dropped;
+        #[cfg(not(feature = "full"))]
+        let dropped = false;
+        #[cfg(feature = "full")]
         let key = self.windows.window_key();
+        #[cfg(not(feature = "full"))]
+        let key = craft::ui::runtime::env::WindowKey::main();
+        #[cfg(feature = "full")]
         let ribbon_out = std::cell::RefCell::new(None);
+        #[cfg(feature = "full")]
+        let mut shell = AppShell::new(key)
+            .mode_set(ScreenModeSet::Document)
+            .screen_mode(Bind::given(mode))
+            .dropped(Bind::given(dropped))
+            .window_title(self.window_title());
+        #[cfg(not(feature = "full"))]
         let shell = AppShell::new(key)
             .mode_set(ScreenModeSet::Document)
             .screen_mode(Bind::given(mode))
             .dropped(Bind::given(dropped))
-            .window_title(self.window_title())
-            .page(self.ui.backstage, crate::backstage::scope(), crate::backstage::show)
-            .title_bar(chrome::title_bar::show)
-            .top(Slot::new("screenBar").screen_bar(), chrome::screen_bar::show)
-            // The ribbon is a tab strip over a group row: its slots are as tall as it is and stack it. A slot of the
-            // default size is one options bar high and lays its content in one line, which put the groups beside the
-            // tabs and collapsed every one of them.
-            .top(Slot::new("ribbonDrop").drops().size(SlotSize::Content), |ui, _cx, app: &mut WordApp| {
-                if !stale(app) {
-                    *ribbon_out.borrow_mut() = Some(ribbon::show(app, ui));
+            .window_title(self.window_title());
+        #[cfg(feature = "full")]
+        {
+            shell = shell.page(self.ui.backstage, crate::backstage::scope(), crate::backstage::show);
+            if self.show_title_bar {
+                shell = shell.title_bar(chrome::title_bar::show);
+            }
+            shell = shell.top(Slot::new("screenBar").screen_bar(), chrome::screen_bar::show);
+            if self.show_ribbon {
+                shell = shell
+                    // The ribbon is a tab strip over a group row: its slots are as tall as it is and stack it. A slot of the
+                    // default size is one options bar high and lays its content in one line, which put the groups beside the
+                    // tabs and collapsed every one of them.
+                    .top(Slot::new("ribbonDrop").drops().size(SlotSize::Content), |ui, _cx, app: &mut WordApp| {
+                        if !stale(app) {
+                            *ribbon_out.borrow_mut() = Some(ribbon::show(app, ui));
+                        }
+                    })
+                    .top(Slot::new("ribbon").size(SlotSize::Content), |ui, _cx, app: &mut WordApp| {
+                        if !stale(app) {
+                            *ribbon_out.borrow_mut() = Some(ribbon::show(app, ui));
+                        }
+                    });
+            }
+            shell = shell
+                // As tall as the bar: a failure's line under the message puts Install below the first line, and a slot of
+                // the default size (one options bar high) clips it, so a press on it reached nothing.
+                .top(Slot::new("languagePack").size(SlotSize::Content).visible(language_packs::bar_offer(self)), language_packs::pack_bar);
+        }
+        let shell = shell.status(true, chrome::status_bar::show).body(|ui, _cx, app: &mut WordApp| {
+            if !app.has_document() || stale(app) {
+                return;
+            }
+            panes::show(app, ui, |ui, _cx, app| {
+                #[cfg(feature = "full")]
+                if app.session.md_source.is_some() {
+                    crate::md_source::show(app, ui);
+                } else {
+                    canvas::show(app, ui);
                 }
-            })
-            .top(Slot::new("ribbon").size(SlotSize::Content), |ui, _cx, app: &mut WordApp| {
-                if !stale(app) {
-                    *ribbon_out.borrow_mut() = Some(ribbon::show(app, ui));
-                }
-            })
-            // As tall as the bar: a failure's line under the message puts Install below the first line, and a slot of
-            // the default size (one options bar high) clips it, so a press on it reached nothing.
-            .top(Slot::new("languagePack").size(SlotSize::Content).visible(language_packs::bar_offer(self)), language_packs::pack_bar)
-            .status(true, chrome::status_bar::show)
-            .body(|ui, _cx, app: &mut WordApp| {
-                if !app.has_document() || stale(app) {
-                    return;
-                }
-                panes::show(app, ui, |ui, _cx, app| {
-                    if app.session.md_source.is_some() {
-                        crate::md_source::show(app, ui);
-                    } else {
-                        canvas::show(app, ui);
-                    }
-                });
-                if app.session.read_aloud.open && !stale(app) {
-                    read_aloud::show(app, ui);
-                }
+                #[cfg(not(feature = "full"))]
+                canvas::show(app, ui);
             });
+            #[cfg(feature = "full")]
+            if app.session.read_aloud.open && !stale(app) {
+                read_aloud::show(app, ui);
+            }
+        });
         let out = shell.show(ui, self);
         // The output belongs to the window that drew it: another window swapped in mid-draw
         // must not take its flags.
@@ -132,24 +172,34 @@ impl WordApp {
         if out.screen_mode != mode {
             self.follow_screen_mode(out.screen_mode);
         }
-        self.ribbon_dropped = out.dropped;
-        // Keytips run outside the ribbon slots so legacy sequences and their hint still work when
-        // no ribbon shows (Focus, Full Screen View) and anchor under the slim screen bar.
-        let ribbon = ribbon_out.into_inner().unwrap_or_else(ribbon::no_ribbon);
-        let screen_bar = out.regions.slots.iter().find(|(slot, _)| *slot == "screenBar").map(|(_, rect)| *rect);
-        crate::keytips::show(ui, self, &ribbon, screen_bar);
+        #[cfg(feature = "full")]
+        {
+            self.ribbon_dropped = out.dropped;
+            // Keytips run outside the ribbon slots so legacy sequences and their hint still work when
+            // no ribbon shows (Focus, Full Screen View) and anchor under the slim screen bar.
+            let ribbon = ribbon_out.into_inner().unwrap_or_else(ribbon::no_ribbon);
+            let screen_bar = out.regions.slots.iter().find(|(slot, _)| *slot == "screenBar").map(|(_, rect)| *rect);
+            crate::keytips::show(ui, self, &ribbon, screen_bar);
+        }
         out.regions
     }
 
     /// Dialogs, panes and other overlays drawn over the window. A command that brings another
     /// window's state in ends the drawing: the rest would be the other window's.
     pub(super) fn show_overlays(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, regions: &ShellRegions) {
+        #[cfg(feature = "full")]
         let window = self.windows.shown();
+        #[cfg(feature = "full")]
         let moved = |app: &WordApp| app.windows.shown() != window;
-        crate::font_download::tick(self);
-        zotero::show_question(self);
-        // PLAN: assumed `updates_ui::run(app: &mut WordApp)` (shell-w13, sh.A20) opens the updater's dialogs on the host.
-        updates_ui::run(self);
+        #[cfg(not(feature = "full"))]
+        let moved = |_app: &WordApp| false;
+        #[cfg(feature = "full")]
+        {
+            crate::font_download::tick(self);
+            zotero::show_question(self);
+            // PLAN: assumed `updates_ui::run(app: &mut WordApp)` (shell-w13, sh.A20) opens the updater's dialogs on the host.
+            updates_ui::run(self);
+        }
         crate::dialogs::host::prepare(self);
         self.dialog_host.run(ui);
         crate::dialogs::host::settle(self, ctx);

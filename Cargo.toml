@@ -166,6 +166,14 @@ lto = "thin"
 codegen-units = 16
 debug = 0
 
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
 # Required by craft-pdf: the backend rejects writers that failed during unwinding.
 # The framework's patches, which Cargo does not carry over to dependents: its vendored crates from craft-libs,
 # and the egui and winit forks it builds with.

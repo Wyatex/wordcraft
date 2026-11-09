@@ -34,9 +34,12 @@ pub mod line_dash;
 pub mod link;
 pub mod locale_number;
 pub mod math;
+#[cfg(feature = "math")]
 pub mod math_edit;
+#[cfg(feature = "math")]
 pub mod math_latex;
 pub mod math_linear;
+#[cfg(feature = "math")]
 pub mod math_symbols;
 pub mod numbering;
 pub mod para;

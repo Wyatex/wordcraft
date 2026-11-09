@@ -30,10 +30,13 @@ use crate::prefs;
 use crate::snapshot as snapshot_types;
 use crate::view;
 pub(crate) use doc_state::Widened;
-pub use doc_state::{CellRange, ColumnBlock, FindState, MathEdit, Selection, UNDO_LIST_MAX, next_math_session};
+pub use doc_state::{CellRange, ColumnBlock, FindState, Selection, UNDO_LIST_MAX};
+#[cfg(feature = "math")]
+pub use doc_state::{MathEdit, next_math_session};
 use doc_state::{TypedWord, Undo, doc_bib_style};
 use ime_state::ImeCaretState;
 pub use locale::set_system_locale;
+#[cfg(feature = "editing")]
 pub use locale::system_locale;
 pub use prefs::Prefs;
 pub use query::blank_document;
@@ -47,6 +50,10 @@ pub use view::{StylesPaneDock, ViewState};
 /// in when they become active (see [`Session::documents`]).
 pub struct Session {
     pub doc: Document,
+    /// Host-level preview policy. When enabled, commands that can change the document or its
+    /// persistent state are rejected before they reach a command handler. This is intentionally
+    /// session state rather than document protection, so preview mode is never written to files.
+    read_only: bool,
     pub sel: Selection,
     pub view: ViewState,
     /// Formatting picked with a collapsed caret, applied to the next typed text.
@@ -73,6 +80,7 @@ pub struct Session {
     pub default_user_dict_path: Option<std::path::PathBuf>,
     pub clipboard: Option<Fragment>,
     /// A tracked cut the next paste can turn into a move (see `cmd::moves`).
+    #[cfg(feature = "editing")]
     pub pending_move: Option<crate::cmd::moves::PendingMove>,
     /// Plain text mirror of the clipboard (for the system clipboard).
     pub clipboard_text: String,
@@ -111,6 +119,7 @@ pub struct Session {
     /// The style-definition change Next / Previous Change selected, for the Accept or Reject that
     /// follows (`cmd::review`). It names its document and selection, so it is shared by the open
     /// documents and stops counting once either changes.
+    #[cfg(feature = "editing")]
     pub(crate) review_style: Option<crate::cmd::review::StyleTarget>,
     /// Undo and redo steps. Shared so `run` can snapshot both stacks cheaply (a pointer per
     /// step) and put them back exactly when a command fails.
@@ -135,6 +144,7 @@ pub struct Session {
     /// command in the group starts the step the group needs.
     join_anchor: bool,
     /// The newest automatic capitalisation, for Word's "Automatically add words to list" (#1857).
+    #[cfg(feature = "editing")]
     pub(crate) autocap: Option<crate::cmd::tools::AutoCap>,
     rev: u64,
     /// Which document this is, unique in the process: changes when [`Session::set_document`]
@@ -148,6 +158,7 @@ pub struct Session {
     /// What Restrict Editing's outright refusals depend on, for greying out commands
     /// ([`Session::why_disabled`]): computed once per document, revision and author instead of
     /// for every button on every frame.
+    #[cfg(feature = "editing")]
     protect_facts: std::sync::Mutex<Option<((u64, u64, String), crate::cmd::protect::Facts)>>,
     /// How many times the document's body was replaced under the same [`Self::document_id`]
     /// (`document.setText`, version restore, compare, Undo/Redo). It is the body's IME
@@ -181,11 +192,14 @@ pub struct Session {
     /// Picture edits: edited media key → original media key (Reset Picture).
     pub originals: std::collections::HashMap<String, String>,
     /// View › Markdown Source: its text, while it is open.
+    #[cfg(feature = "editing")]
     pub md_source: Option<crate::cmd::md_source::MdSource>,
     /// A Markdown file's own text, so Save can write it unchanged.
+    #[cfg(feature = "editing")]
     pub md_file: crate::cmd::md_source::FileText,
     /// Picture effects, styles and borders: drawn media key → what was drawn on which bitmap,
     /// so the next one replaces them instead of drawing over them (#2052).
+    #[cfg(feature = "editing")]
     pub picture_looks: std::collections::HashMap<String, crate::cmd::objects::PictureLook>,
     /// Last mutating command (Repeat).
     pub last_command: Option<(String, Value)>,
@@ -200,12 +214,14 @@ pub struct Session {
     /// Citation style: APA, MLA, Chicago, IEEE.
     pub bib_style: String,
     /// Mail merge data source and preview.
+    #[cfg(feature = "editing")]
     pub merge: crate::cmd::mailings::MergeState,
     /// Requests from commands to the UI (open a dialog, scroll…), drained by the front end.
     pub ui_requests: Vec<Value>,
     /// View › Window: the other WordCraft windows and Side by Side (#322).
     pub windows: crate::cmd::view::Windows,
     /// Read Aloud player (Review › Speech).
+    #[cfg(feature = "editing")]
     pub read_aloud: crate::speech::ReadAloud,
     /// Preferences the front end saves between runs.
     pub prefs: Prefs,
@@ -221,14 +237,17 @@ pub struct Session {
     /// the pane reading them every frame runs the checker only after a change.
     findings: Option<((u64, u64), Vec<Value>)>,
     /// Custom ribbon and Quick Access Toolbar (`tools.customizeRibbon`); the front end saves it too.
+    #[cfg(feature = "editing")]
     pub ribbon: crate::RibbonLayout,
     /// The language new blank documents (and opened plain text) are written in, a BCP 47 tag;
     /// `None` is WordCraft's default, US English. The front end sets it from the interface
     /// language with [`Session::set_editing_language`] (a Polish interface writes Polish).
     pub editing_lang: Option<String>,
     /// Editing inside an equation: which one and the caret in it.
+    #[cfg(feature = "math")]
     pub math: Option<MathEdit>,
     /// Equations are typed in LaTeX rather than the linear format.
+    #[cfg(feature = "math")]
     pub math_latex: bool,
     /// Text typed into equations is normal (non-math) text.
     pub math_normal_text: bool,
@@ -237,10 +256,10 @@ pub struct Session {
     /// file that was opened, cleared when the document is replaced.
     pub password: Option<crate::io::Password>,
     /// The recovery worker every open document's copy is kept through (desktop hosts only).
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "editing", not(target_arch = "wasm32")))]
     pub(crate) recovery: Option<crate::recovery::Recovery>,
     /// The active document's recovery copy.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "editing", not(target_arch = "wasm32")))]
     pub(crate) recovery_slot: crate::recovery::Slot,
     /// More pictures and shapes selected along with the one the selection holds (Shift+click),
     /// for Group. Cleared by any edit or selection change other than adding to it.
@@ -248,6 +267,7 @@ pub struct Session {
     /// The member of the selected Drawing Canvas picked on its own (#2637), which Shape Format,
     /// Delete, Copy and the frame act on; see [`crate::cmd::canvas::selected_member`]. Cleared by
     /// any selection change, caret movement or undo.
+    #[cfg(feature = "editing")]
     pub member: Option<crate::cmd::canvas::CanvasMember>,
     /// Column (block) selection, if one was made (see [`Session::column_segments`]).
     pub column: Option<ColumnBlock>,
@@ -287,10 +307,23 @@ impl Session {
     /// ([`crate::cmd::accessibility::check`]). The checker runs again only when the document
     /// changed: an edit bumps [`Session::rev`], a replacement changes [`Session::document_id`].
     pub fn accessibility_findings(&mut self) -> &[Value] {
-        let stamp = (self.document_id, self.rev);
-        if self.findings.as_ref().is_none_or(|(made_for, _)| *made_for != stamp) {
-            self.findings = Some((stamp, crate::cmd::accessibility::check(&self.doc)));
+        #[cfg(feature = "editing")]
+        {
+            let stamp = (self.document_id, self.rev);
+            if self.findings.as_ref().is_none_or(|(made_for, _)| *made_for != stamp) {
+                self.findings = Some((stamp, crate::cmd::accessibility::check(&self.doc)));
+            }
         }
         self.findings.as_ref().map_or(&[], |(_, findings)| findings.as_slice())
+    }
+
+    /// Enable or disable the host-level read-only policy used by document previews.
+    pub fn set_read_only(&mut self, read_only: bool) {
+        self.read_only = if cfg!(not(feature = "editing")) { true } else { read_only };
+    }
+
+    /// Whether this session refuses commands that can change the document.
+    pub fn read_only(&self) -> bool {
+        self.read_only
     }
 }

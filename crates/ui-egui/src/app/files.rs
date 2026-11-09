@@ -1,13 +1,20 @@
+#[cfg(feature = "full")]
 use craft::host::{PickId, Picked};
 use craft::platform::open::{DropTarget, DroppedFile, Intake};
+#[cfg(feature = "full")]
 use craft::quit::{CloseAnswer, CloseGuard, CloseScope, GuardStep};
+#[cfg(feature = "full")]
 use craft::ui::dialog::{DialogId, DialogResult, UnsavedChangesDialog};
+#[cfg(feature = "full")]
 use craft::ui::shell::embed::CloseDecision;
 
-use super::{AutoSaveBlock, PromptSave, Value, WordApp, file_dialogs, i18n, json, keeps_everything, panes, printing};
+#[cfg(feature = "full")]
+use super::{AutoSaveBlock, PromptSave, file_dialogs, i18n, keeps_everything, panes, printing};
+use super::{Value, WordApp, json};
 
 /// The close operation in progress: the unsaved-changes guard, the command it holds back and the
 /// prompt it has open.
+#[cfg(feature = "full")]
 pub(crate) struct Closing {
     /// Decides, one document at a time, what the operation does next.
     pub guard: CloseGuard<u64>,
@@ -19,6 +26,7 @@ pub(crate) struct Closing {
     pub prompt: Option<DialogId>,
 }
 
+#[cfg(feature = "full")]
 impl WordApp {
     /// Answer the Save Changes prompt of the running close operation: Save (through Save As for a
     /// new document) and carry on, carry on without saving, or cancel. A cancelled Save As cancels.
@@ -570,7 +578,19 @@ impl WordApp {
             self.print.said = Some(self.print_gen);
         }
     }
+}
 
+#[cfg(not(feature = "full"))]
+impl WordApp {
+    pub(crate) fn settle_saves(&mut self) {}
+    pub(crate) fn autosave_tick(&mut self, _now: f64) {}
+    pub fn autosaves(&self) -> bool {
+        false
+    }
+}
+
+#[cfg(feature = "full")]
+impl WordApp {
     /// Whether the document's file is one the user saved to in this session.
     pub fn saved_here(&self) -> bool {
         self.session.path.is_some() && self.session.path == self.autosave_path
@@ -624,7 +644,9 @@ impl WordApp {
             }
         }
     }
+}
 
+impl WordApp {
     /// What arrived through the platform's file intake: documents open, pictures insert,
     /// recipient lists (CSV/TSV, spreadsheets, or a text file asked for as one) load as recipients,
     /// and a quit request goes through the close guard.
@@ -651,7 +673,7 @@ impl WordApp {
                 }
                 // An OS open request that arrived as bytes, with no path.
                 Intake::Bytes { name, bytes } => {
-                    let data = wordcraft_engine::cmd::insert::base64_encode(bytes.as_ref());
+                    let data = wordcraft_engine::io::base64_encode(bytes.as_ref());
                     if let Err(e) = self.run("file.open", json!({"path": name, "data": data})) {
                         self.report_open_failure(&name, &e);
                     }
@@ -680,45 +702,56 @@ impl WordApp {
     /// document. A file with bytes (the web) is passed as data; one with a path is read from it.
     fn open_dropped_file(&mut self, file: &DroppedFile, placed_picture: &mut bool) -> Result<Value, String> {
         let name = file.path.as_ref().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| file.name.clone());
-        let lower = name.to_ascii_lowercase();
-        let data = file.bytes.as_ref().map(|b| wordcraft_engine::cmd::insert::base64_encode(b.as_ref()));
-        let img = file_dialogs::is_picture_name(&name);
-        // Any recipient file ends the pending picker request, so a later .txt drop opens normally.
-        let asked = std::mem::take(&mut self.recipient_list_pending);
-        let list = lower.ends_with(".csv") || lower.ends_with(".tsv") || (lower.ends_with(".txt") && asked);
-        let sheet = wordcraft_engine::cmd::mailings::is_spreadsheet_name(&lower);
-        self.recipient_list_pending = asked && !list && !sheet;
+        let data = file.bytes.as_ref().map(|b| wordcraft_engine::io::base64_encode(b.as_ref()));
         let with_data = |mut p: Value| {
             if let Some(d) = &data {
                 p["data"] = json!(d);
             }
             p
         };
-        let r = if sheet {
-            self.load_recipients(with_data(json!({"path": name})))
-        } else if wordcraft_fonts::is_font_file_name(&lower) {
-            match &data {
-                Some(d) => self.run("font.add", json!({"name": name, "data": d})),
-                None => self.run("font.add", json!({"path": name})),
+        #[cfg(not(feature = "full"))]
+        let _ = placed_picture;
+        #[cfg(feature = "full")]
+        let r = if !self.session.read_only() {
+            let lower = name.to_ascii_lowercase();
+            let img = file_dialogs::is_picture_name(&name);
+            // Any recipient file ends the pending picker request, so a later .txt drop opens normally.
+            let asked = std::mem::take(&mut self.recipient_list_pending);
+            let list = lower.ends_with(".csv") || lower.ends_with(".tsv") || (lower.ends_with(".txt") && asked);
+            let sheet = wordcraft_engine::cmd::mailings::is_spreadsheet_name(&lower);
+            self.recipient_list_pending = asked && !list && !sheet;
+            if sheet {
+                self.load_recipients(with_data(json!({"path": name})))
+            } else if wordcraft_fonts::is_font_file_name(&lower) {
+                match &data {
+                    Some(d) => self.run("font.add", json!({"name": name, "data": d})),
+                    None => self.run("font.add", json!({"path": name})),
+                }
+            } else if list {
+                match &file.bytes {
+                    Some(b) => self.load_recipients(json!({"csv": wordcraft_engine::io::decode_text(b)})),
+                    None => self.load_recipients(json!({"path": name})),
+                }
+            } else if img {
+                self.caret_after_placed_picture(*placed_picture);
+                let r = match &data {
+                    Some(d) => self.insert_or_change_picture(json!({"data": d})),
+                    None => self.run("insert.picture", json!({"path": name})),
+                };
+                *placed_picture = Self::placed_in_text(&r);
+                r
+            } else if data.is_some() {
+                self.run("file.open", with_data(json!({"path": name})))
+            } else {
+                self.open_file(&name, None)
             }
-        } else if list {
-            match &file.bytes {
-                Some(b) => self.load_recipients(json!({"csv": wordcraft_engine::io::decode_text(b)})),
-                None => self.load_recipients(json!({"path": name})),
-            }
-        } else if img {
-            self.caret_after_placed_picture(*placed_picture);
-            let r = match &data {
-                Some(d) => self.insert_or_change_picture(json!({"data": d})),
-                None => self.run("insert.picture", json!({"path": name})),
-            };
-            *placed_picture = Self::placed_in_text(&r);
-            r
         } else if data.is_some() {
             self.run("file.open", with_data(json!({"path": name})))
         } else {
             self.open_file(&name, None)
         };
+        #[cfg(not(feature = "full"))]
+        let r = if data.is_some() { self.run("file.open", with_data(json!({"path": name}))) } else { self.open_file(&name, None) };
         if let Err(e) = &r {
             self.report_open_failure(&name, e);
             // Backstage hides the status bar; leave it so the error shows.
@@ -729,6 +762,7 @@ impl WordApp {
 }
 
 /// The most characters a name taken from the text keeps ([`suggested_stem`]).
+#[cfg(feature = "full")]
 const SUGGESTED_MAX: usize = 50;
 
 /// A file name from a paragraph's text (#5793): up to its first sentence or clause end
@@ -736,6 +770,7 @@ const SUGGESTED_MAX: usize = 50;
 /// file name can't hold (`\ / : * ? " < > |` and controls), white space collapsed, at most
 /// [`SUGGESTED_MAX`] characters cut at a word's end, and no dot or space at either end (Windows
 /// drops them). `None` when nothing is left, so the next paragraph, or `Document1`, is used.
+#[cfg(feature = "full")]
 pub(crate) fn suggested_stem(text: &str) -> Option<String> {
     let end = |c: char| matches!(c, '.' | '!' | '?' | ';' | ':' | '\n' | '\r' | '\u{0B}' | '\u{2029}' | '。' | '！' | '？' | '；' | '：');
     let head = text.split(end).next().unwrap_or("");

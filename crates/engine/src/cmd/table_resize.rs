@@ -7,15 +7,22 @@
 //! so every drag is one undo step. A right-to-left table's rows resize; its columns and corner
 //! don't yet (`ResizeTarget::resizable_columns`).
 
+#[cfg(feature = "editing")]
 use serde_json::Value;
-use wordcraft_doc::props::{Align, HeightRule, VMerge};
+use wordcraft_doc::props::VMerge;
+#[cfg(feature = "editing")]
+use wordcraft_doc::props::{Align, HeightRule};
+#[cfg(feature = "editing")]
 use wordcraft_doc::table::MAX_COLS;
 use wordcraft_doc::{Cell, Document, Path, StoryRef, Table};
 use wordcraft_geom::Rect;
 use wordcraft_layout::{DocLayout, Placed};
 
+#[cfg(feature = "editing")]
 use super::sel_result;
-use crate::{CmdError, CmdResult, CommandSpec, Session, p};
+use crate::Session;
+#[cfg(feature = "editing")]
+use crate::{CmdError, CmdResult, CommandSpec, p};
 
 /// How near (points) a border has to be to the pointer, by default.
 pub const REACH: f32 = 3.0;
@@ -28,6 +35,7 @@ pub const MIN_ROW: f32 = 4.0;
 /// The largest column width or row height a drag sets (points; Word's 22 inches).
 const MAX_LEN: f32 = 1584.0;
 
+#[cfg(feature = "editing")]
 pub fn specs() -> Vec<CommandSpec> {
     vec![CommandSpec::new("table.resizeDrag", "Resize Table by Dragging", "Table Layout › Cell Size", resize_drag).params(
         r#"{"page": n, "x": pt, "y": pt, "toX": pt, "toY": pt, "shift"?: bool, "ctrl"?: bool, "reach"?: pt} (a mouse drag in page points, 0-based page, starting on a table border or the resize handle: a column border moves (the column to its right gives or takes the difference, so the table keeps its width; with ctrl the columns right of it share it in proportion; with shift, or on the table's right edge, only the column left of it changes); the table's left edge moves a left-aligned table's indent, the first column making up the difference (a centred or right-aligned table keeps its alignment: only the first column changes); with cells of the table selected, a border of theirs moves only in their rows; a row's bottom border sets that row's height; the handle just outside the bottom-right corner scales every column and the rows on that page. `reach` (default 3) is how near the start has to be.)"#,
@@ -563,6 +571,7 @@ pub fn resize_target(l: &DocLayout, doc: &Document, page: usize, x: f32, y: f32,
     best.map(|b| b.2)
 }
 
+#[cfg(feature = "editing")]
 fn resize_drag(s: &mut Session, v: &Value) -> CmdResult {
     let page =
         p::u64(v, "page").map(|n| usize::try_from(n).unwrap_or(usize::MAX)).ok_or_else(|| CmdError::Params("`page` (number) is required".into()))?;
@@ -650,6 +659,7 @@ fn resize_drag(s: &mut Session, v: &Value) -> CmdResult {
 /// Moves `t`'s left edge `by` points: its indent, or a floating table's offset; whether it did.
 /// A centred or right-aligned table keeps its alignment, as in Word: the first column's new width
 /// is all that changes, and the table stays centred or on its right edge.
+#[cfg(feature = "editing")]
 fn move_left_edge(t: &mut Table, by: f32) -> bool {
     match t.props.float.as_mut() {
         Some(f) => {
@@ -669,6 +679,7 @@ fn move_left_edge(t: &mut Table, by: f32) -> bool {
 /// widths, left to right; the other rows keep their cells' borders where they are drawn (the
 /// grid lines at `cols`). The grid gets a line wherever a row has a cell border, and each cell
 /// spans the columns between its own.
+#[cfg(feature = "editing")]
 fn regrid(t: &mut Table, cols: &[f32], rows: &[(usize, Vec<f32>)]) -> Result<(), CmdError> {
     let left = cols.first().copied().unwrap_or(0.0);
     let last = cols.len().saturating_sub(1);
@@ -721,12 +732,14 @@ fn regrid(t: &mut Table, cols: &[f32], rows: &[(usize, Vec<f32>)]) -> Result<(),
 }
 
 /// The page x of the target table's left edge on `page`, as drawn.
+#[cfg(feature = "editing")]
 fn drawn_left(l: &DocLayout, page: usize, target: &ResizeTarget) -> Option<f32> {
     cell_boxes(l, page).iter().filter(|b| b.story == target.story && b.table == target.table).map(|b| b.rect.x).min_by(f32::total_cmp)
 }
 
 /// Make `widths` (one per grid column) the table's column widths, as drawn: no preferred table
 /// width scales them again.
+#[cfg(feature = "editing")]
 pub(crate) fn set_widths(t: &mut Table, widths: Vec<f32>) {
     if widths.len() == t.cols() {
         t.grid = widths;
@@ -737,6 +750,7 @@ pub(crate) fn set_widths(t: &mut Table, widths: Vec<f32>) {
 }
 
 /// The drawn height of each of the target table's rows on `page`.
+#[cfg(feature = "editing")]
 fn drawn_heights(l: &DocLayout, doc: &Document, page: usize, target: &ResizeTarget) -> Vec<(usize, f32)> {
     tables_on(l, doc, page)
         .into_iter()
@@ -746,6 +760,7 @@ fn drawn_heights(l: &DocLayout, doc: &Document, page: usize, target: &ResizeTarg
 }
 
 /// Mark the table's paragraphs changed, so the layout redoes them.
+#[cfg(feature = "editing")]
 pub(crate) fn touch(s: &mut Session, target: &ResizeTarget) -> Result<(), CmdError> {
     let story = target.story;
     let paths: Vec<Path> =
@@ -759,5 +774,6 @@ pub(crate) fn touch(s: &mut Session, target: &ResizeTarget) -> Result<(), CmdErr
     Ok(())
 }
 
+#[cfg(feature = "editing")]
 #[cfg(test)]
 mod tests;

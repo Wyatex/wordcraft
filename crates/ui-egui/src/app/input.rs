@@ -17,7 +17,11 @@ impl WordApp {
         let Some(pos) = ctx.input(|i| if i.pointer.any_click() { i.pointer.interact_pos() } else { None }) else { return };
         // The page handles its own clicks (comment balloons there take the keyboard themselves).
         let on_slot = regions.slots.iter().any(|(_, rect)| rect.contains(pos));
-        if self.canvas.selected_balloon().is_some() || (!on_slot && self.canvas.contains(pos)) {
+        #[cfg(feature = "full")]
+        let balloon = self.canvas.selected_balloon().is_some();
+        #[cfg(not(feature = "full"))]
+        let balloon = false;
+        if balloon || (!on_slot && self.canvas.contains(pos)) {
             return;
         }
         let on_chrome = ctx.layer_id_at(pos).is_none_or(|l| l.order == egui::Order::Background);

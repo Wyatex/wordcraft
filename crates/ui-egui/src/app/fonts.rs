@@ -86,6 +86,7 @@ impl WordApp {
         }
         self.font_generation = generation;
         self.session.relayout();
+        #[cfg(feature = "full")]
         self.previews.fonts_changed();
         ctx.request_repaint();
     }

@@ -8,7 +8,9 @@
 
 use std::collections::BTreeMap;
 
-use craft_keymap::{Binding, Chord, CommandDef, CommandRef, Keymap, Overrides, Platform, Scope, Scopes};
+#[cfg(any(test, feature = "editing"))]
+use craft_keymap::{Binding, CommandDef, Keymap, Scope, Scopes};
+use craft_keymap::{Chord, CommandRef, Overrides, Platform};
 use serde_json::Value;
 
 use crate::{CommandSpec, Registry};
@@ -28,6 +30,7 @@ fn pieces(spec: &CommandSpec) -> impl Iterator<Item = &'static str> {
 
 /// The keymap of every engine command with its registry keys, under `overrides`. Off macOS,
 /// Alt+Q is the interface's command search key, so it never reaches an engine command.
+#[cfg(any(test, feature = "editing"))]
 pub(crate) fn registry_keymap(reg: &Registry, overrides: &Overrides) -> Keymap {
     let catalog: Vec<CommandDef> = reg
         .all()

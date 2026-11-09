@@ -8,8 +8,10 @@
 #![forbid(unsafe_code)]
 
 pub mod color;
+#[cfg(feature = "download")]
 pub mod download;
 mod fontdb;
+#[cfg(feature = "math")]
 pub mod math;
 mod script;
 mod ui_fallback;

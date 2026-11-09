@@ -4,12 +4,19 @@
 // PLAN: Cargo.toml of ui-egui needs craft-settings, craft-keymap, craft-font-manager, craft-platform,
 // craft-print, toml_edit and craft-window's restore store; the app-hub owns the manifest.
 
+#[cfg(feature = "full")]
 use craft::settings::{MergeRule, SectionError, Settings};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+#[cfg(feature = "full")]
+use serde_json::Map;
+use serde_json::Value;
 
+#[cfg(feature = "full")]
+use crate::MAX_RECENT_FONTS;
 use crate::scroll::ScrollSpeed;
-use crate::{DEFAULT_TAB, DisplayServer, MAX_RECENT, MAX_RECENT_FONTS, StatusCount, dialogs_insert, i18n, panes, print_page, theme};
+use crate::{DEFAULT_TAB, DisplayServer, MAX_RECENT, StatusCount, i18n, panes, theme};
+#[cfg(feature = "full")]
+use crate::{dialogs_insert, print_page};
 
 /// The user's custom shortcuts. A wrapper because `craft::keymap::Overrides` has no `PartialEq`, which
 /// [`Settings`] needs to see whether a save is due.
@@ -33,6 +40,7 @@ pub struct Prefs {
     pub backstage: bool,
     pub backstage_page: String,
     /// File › Print settings (#641); not saved.
+    #[cfg(feature = "full")]
     #[serde(skip)]
     pub print: print_page::PrintSettings,
     pub ribbon_collapsed: bool,
@@ -42,6 +50,7 @@ pub struct Prefs {
     pub quick_access_toolbar: bool,
     pub recent: Vec<String>,
     /// Symbols inserted from the Symbol dialog, most recent first (#321).
+    #[cfg(feature = "full")]
     pub recent_symbols: Vec<dialogs_insert::RecentSymbol>,
     /// Saved choices in Insert > Date & Time: format picture.
     pub date_time_format: String,
@@ -53,6 +62,7 @@ pub struct Prefs {
     pub recent_colors: Vec<String>,
     /// The font pickers' stars and Recently Used Fonts (the section at the top of the font list,
     /// #2068), shared by every font box.
+    #[cfg(feature = "full")]
     pub font_picker: craft::font_manager::picker::FontPickerSettings,
     /// Interface theme: light, dark, or follow the OS appearance (#115).
     pub theme: theme::Appearance,
@@ -120,6 +130,7 @@ pub struct Prefs {
     pub keyboard: Shortcuts,
     /// Custom ribbon tabs and groups, hidden tabs and the Quick Access Toolbar (Customize Ribbon,
     /// #379); the session owns them while running.
+    #[cfg(feature = "full")]
     pub ribbon: wordcraft_engine::RibbonLayout,
     /// Caption labels the user added (References › Insert Caption › New Label), kept between
     /// runs like Word keeps them in its Normal template (#402).
@@ -128,6 +139,7 @@ pub struct Prefs {
     pub last_caption_label: String,
     /// Draw › Add Pen: the pens added to the pen gallery; the session owns them while running.
     /// Entries that aren't pens are dropped on reading.
+    #[cfg(feature = "full")]
     #[serde(deserialize_with = "wordcraft_engine::cmd::draw::lenient_pens")]
     pub ink_pens: Vec<wordcraft_engine::cmd::draw::CustomPen>,
     /// File › Options › General: initials for comments; empty = the user name's. The session
@@ -176,15 +188,18 @@ impl Default for Prefs {
             tab: DEFAULT_TAB.into(),
             backstage: false,
             backstage_page: "home".into(),
+            #[cfg(feature = "full")]
             print: print_page::PrintSettings::default(),
             ribbon_collapsed: false,
             quick_access_toolbar: true,
             recent: Vec::new(),
+            #[cfg(feature = "full")]
             recent_symbols: Vec::new(),
             date_time_format: String::new(),
             date_time_language: String::new(),
             date_time_update: false,
             recent_colors: Vec::new(),
+            #[cfg(feature = "full")]
             font_picker: craft::font_manager::picker::FontPickerSettings::default(),
             theme: theme::Appearance::default(),
             interface_size: theme::InterfaceSize::default(),
@@ -210,9 +225,11 @@ impl Default for Prefs {
             check_spelling: true,
             caret_animation: true,
             keyboard: Shortcuts::default(),
+            #[cfg(feature = "full")]
             ribbon: wordcraft_engine::RibbonLayout::default(),
             caption_labels: Vec::new(),
             last_caption_label: String::new(),
+            #[cfg(feature = "full")]
             ink_pens: Vec::new(),
             initials: String::new(),
             options_pane: "general".into(),
@@ -239,6 +256,7 @@ impl Prefs {
     }
 }
 
+#[cfg(feature = "full")]
 impl Settings for Prefs {
     const APP_ID: &'static str = "wordcraft";
     const SCHEMA_VERSION: u32 = 1;
@@ -264,27 +282,32 @@ impl Settings for Prefs {
 }
 
 /// An entry that is its own identity.
+#[cfg(feature = "full")]
 fn whole_entry(v: &toml_edit::Value) -> Option<String> {
     Some(v.to_string().trim().to_string())
 }
 
 /// A recent-list entry by its text (a path, a colour) or, for a table, its whole text.
+#[cfg(feature = "full")]
 fn text_key(v: &toml_edit::Value) -> Option<String> {
     Some(v.as_str().map_or_else(|| v.to_string().trim().to_string(), str::to_string))
 }
 
 /// A recent font by its name, ignoring case as the list does.
+#[cfg(feature = "full")]
 fn font_key(v: &toml_edit::Value) -> Option<String> {
     v.as_str().map(|s| s.trim().to_lowercase())
 }
 
 /// An AutoCorrect replacement by the text it replaces.
+#[cfg(feature = "full")]
 fn replaced_text(v: &toml_edit::Value) -> Option<String> {
     let first = v.as_array().and_then(|a| a.get(0));
     Some(first.unwrap_or(v).to_string().trim().to_string())
 }
 
 /// A ribbon tab by its name, ignoring case as the ribbon does.
+#[cfg(feature = "full")]
 fn tab_name(v: &toml_edit::Value) -> Option<String> {
     let name = v.as_inline_table().and_then(|t| t.get("name")).and_then(|n| n.as_str());
     Some(name.map_or_else(|| v.to_string().trim().to_string(), str::to_lowercase))
@@ -294,6 +317,7 @@ fn tab_name(v: &toml_edit::Value) -> Option<String> {
 /// one-time import. A setting with a value of the wrong type (or a newer or older version's idea of
 /// it) falls back to its default and is reported as a [`SectionError`] with its path; unknown keys are
 /// dropped. `Err` only when the file isn't a JSON object.
+#[cfg(feature = "full")]
 pub fn legacy_ui_json(bytes: &[u8]) -> Result<(Prefs, Vec<SectionError>), String> {
     let mut v: Value = serde_json::from_slice(bytes).map_err(|e| format!("ui.json is not JSON: {e}"))?;
     let Some(map) = v.as_object_mut() else {
@@ -321,12 +345,14 @@ pub fn legacy_ui_json(bytes: &[u8]) -> Result<(Prefs, Vec<SectionError>), String
     Ok((prefs, errors))
 }
 
+#[cfg(feature = "full")]
 fn migrate_units_of(v: &mut Value) {
     crate::migrate_units(v);
 }
 
 /// The saved shortcuts in either shape: the old `{"assigned", "removed"}` map becomes overrides
 /// through the command registry; a value already in the new shape reads as it is.
+#[cfg(feature = "full")]
 fn legacy_keyboard(saved: &Value) -> Option<Shortcuts> {
     // Only an object is a shortcut map; anything else is junk, whatever the new shape would take of it.
     if !saved.is_object() {
@@ -342,6 +368,7 @@ fn legacy_keyboard(saved: &Value) -> Option<Shortcuts> {
 /// Deserializes `input` over the defaults one setting at a time: a value of the wrong type is
 /// dropped (its default stays) and reported, instead of failing the whole read. Objects nest
 /// (`editing`).
+#[cfg(feature = "full")]
 fn lenient(input: &Value) -> (Prefs, Vec<SectionError>) {
     let mut errors = Vec::new();
     let mut base = serde_json::to_value(Prefs::default()).unwrap_or(Value::Null);
@@ -360,6 +387,7 @@ fn lenient(input: &Value) -> (Prefs, Vec<SectionError>) {
 }
 
 /// The object at `path` inside `root`.
+#[cfg(feature = "full")]
 fn object_at<'a>(root: &'a mut Value, path: &[String]) -> Option<&'a mut Map<String, Value>> {
     let mut v = root;
     for k in path {
@@ -369,11 +397,13 @@ fn object_at<'a>(root: &'a mut Value, path: &[String]) -> Option<&'a mut Map<Str
 }
 
 /// The report of the value at `path`/`key` that was reset.
+#[cfg(feature = "full")]
 fn reset(path: &[String], key: &str, error: &serde_json::Error) -> SectionError {
     let section = path.iter().map(String::as_str).chain([key]).collect::<Vec<_>>().join(".");
     SectionError { section, message: error.to_string() }
 }
 
+#[cfg(feature = "full")]
 fn overlay(
     root: &mut Value,
     path: &mut Vec<String>,
@@ -449,5 +479,6 @@ pub fn import_legacy_window(bytes: &[u8], store: &mut craft::window::restore::St
     }
 }
 
+#[cfg(feature = "full")]
 #[cfg(test)]
 mod tests;

@@ -11,6 +11,7 @@ use egui::{Color32, Painter, Pos2, Rect, Shape, Stroke, pos2, vec2};
 /// One row per file in `crates/ui-egui/icons/`, in sorted order: the icon's name and its document.
 ///
 /// The names come from the exporter's file names, so a reader names an icon exactly as its file does.
+#[cfg(feature = "full")]
 static WORDCRAFT_ICONS_TABLE: &[(&str, &[u8])] = &[
     ("accept", include_bytes!("../icons/accept.svg")),
     ("accessibility", include_bytes!("../icons/accessibility.svg")),
@@ -341,6 +342,26 @@ static WORDCRAFT_ICONS_TABLE: &[(&str, &[u8])] = &[
     ("zoomOut", include_bytes!("../icons/zoomOut.svg")),
 ];
 
+#[cfg(not(feature = "full"))]
+static WORDCRAFT_ICONS_TABLE: &[(&str, &[u8])] = &[
+    ("chevronDoubleRight", include_bytes!("../icons/chevronDoubleRight.svg")),
+    ("chevronDown", include_bytes!("../icons/chevronDown.svg")),
+    ("chevronLeft", include_bytes!("../icons/chevronLeft.svg")),
+    ("chevronRight", include_bytes!("../icons/chevronRight.svg")),
+    ("chevronUp", include_bytes!("../icons/chevronUp.svg")),
+    ("wordcraft.close", include_bytes!("../icons/close.svg")),
+    ("closeOutline", include_bytes!("../icons/closeOutline.svg")),
+    ("wordcraft.copy", include_bytes!("../icons/copy.svg")),
+    ("focus", include_bytes!("../icons/focus.svg")),
+    ("fontMissing", include_bytes!("../icons/fontMissing.svg")),
+    ("wordcraft.minus", include_bytes!("../icons/minus.svg")),
+    ("wordcraft.plus", include_bytes!("../icons/plus.svg")),
+    ("printLayout", include_bytes!("../icons/printLayout.svg")),
+    ("readMode", include_bytes!("../icons/readMode.svg")),
+    ("wordcraft.search", include_bytes!("../icons/search.svg")),
+    ("webLayout", include_bytes!("../icons/webLayout.svg")),
+];
+
 /// The app icon set. Every document is drawn with the pen width 1.25 of the 20-unit view box,
 /// which the framework scales to its own stroke.
 pub static WORDCRAFT_ICONS: AppIcons = AppIcons::new("wordcraft", Some(1.25), WORDCRAFT_ICONS_TABLE);
@@ -462,6 +483,7 @@ impl Glyph for LibraryGlyph {
     }
 }
 
+#[cfg(feature = "full")]
 #[cfg(test)]
 mod tests {
     use super::*;

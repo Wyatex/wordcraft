@@ -137,6 +137,7 @@ pub(super) struct Undo {
 pub(super) const EDIT_MARKS: usize = 4;
 
 /// The equation being edited.
+#[cfg(feature = "math")]
 #[derive(Clone, Debug, PartialEq)]
 pub struct MathEdit {
     /// The equation object (its U+FFFC). This moves as the document is edited, so it is not an
@@ -152,6 +153,7 @@ pub struct MathEdit {
 ///
 /// Exhaustion fails closed: a repeated token could let a cached IME context outlive the
 /// equation it described, so the caller refuses to start editing instead.
+#[cfg(feature = "math")]
 pub fn next_math_session() -> Option<u64> {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     NEXT.try_update(std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed, |n| n.checked_add(1)).ok()
@@ -171,7 +173,15 @@ pub(super) fn typed_range(text: &str, off: usize) -> Option<(usize, usize)> {
 
 /// The name of `doc`'s bibliography style, APA when it names none we know.
 pub(super) fn doc_bib_style(doc: &Document) -> String {
-    doc.settings.bib_style.as_deref().and_then(crate::cmd::citations::find_style).map_or("APA", |st| st.name).to_string()
+    #[cfg(feature = "editing")]
+    {
+        doc.settings.bib_style.as_deref().and_then(crate::cmd::citations::find_style).map_or("APA", |st| st.name).to_string()
+    }
+    #[cfg(not(feature = "editing"))]
+    {
+        let _ = doc;
+        "APA".to_string()
+    }
 }
 
 /// Most pending front-end requests a session keeps.

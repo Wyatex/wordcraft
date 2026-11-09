@@ -5,6 +5,7 @@ use egui::{Key, Modifiers};
 use serde_json::json;
 
 use crate::WordApp;
+#[cfg(feature = "full")]
 use wordcraft_engine::ImeEditOutcome;
 
 mod canvas;

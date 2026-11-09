@@ -8,11 +8,18 @@ description = "WordCraft layout: shaping, line breaking, tabs, lists, tables, pa
 [lints]
 workspace = true
 
+[features]
+default = ["math", "proofing", "full-codecs", "all-fonts"]
+math = ["wordcraft-doc/math", "wordcraft-fonts/math"]
+proofing = ["dep:wordcraft-proof"]
+full-codecs = ["wordcraft-geom/image"]
+all-fonts = ["wordcraft-fonts/all-fonts"]
+
 [dependencies]
-wordcraft-geom = { workspace = true, features = ["image"] }
-wordcraft-doc = { workspace = true }
-wordcraft-fonts = { workspace = true }
-wordcraft-proof = { workspace = true }
+wordcraft-geom = { path = "../geom", features = ["slim-image"] }
+wordcraft-doc = { path = "../doc", default-features = false }
+wordcraft-fonts = { path = "../fonts", default-features = false }
+wordcraft-proof = { workspace = true, optional = true }
 craft-metafile = { workspace = true }
 kurbo = { workspace = true }
 unicode-bidi = { workspace = true }

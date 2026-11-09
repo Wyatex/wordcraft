@@ -16,6 +16,7 @@ use serde_json::{Value, json};
 use crate::WordApp;
 
 /// Most font files one Add Font pick tries; the rest of a bigger selection is skipped.
+#[cfg(feature = "full")]
 const MAX_FONTS_PER_PICK: usize = 2000;
 
 /// Picture suffixes shared by native/web choosers, drop dispatch and copied-file paste.
@@ -30,12 +31,14 @@ pub fn open_filters(purpose: &str) -> &'static [(&'static str, &'static [&'stati
         "picture" => &[("Pictures", PICTURES)],
         "font" => &[("Fonts", wordcraft_fonts::FONT_FILE_EXTS)],
         "sources" => &[("Word sources", &["xml"]), ("All files", &["*"])],
+        #[cfg(feature = "full")]
         "recipients" => &[("Recipient lists", wordcraft_engine::cmd::mailings::RECIPIENT_EXTENSIONS), ("All files", &["*"])],
         _ => &[("Documents", DOCUMENTS), ("Word document", &["docx"]), ("All files", &["*"])],
     }
 }
 
 /// Whether a file name has a picture suffix offered by the Insert/Change Picture chooser.
+#[cfg(feature = "full")]
 pub(crate) fn is_picture_name(name: &str) -> bool {
     name.rsplit_once('.').is_some_and(|(_, ext)| PICTURES.iter().any(|known| known.eq_ignore_ascii_case(ext)))
 }
@@ -49,6 +52,7 @@ fn with_open_filters(mut request: PickRequest, purpose: &str) -> PickRequest {
 }
 
 /// A path as the status line shows it: isolated in a right-to-left interface, unchanged otherwise.
+#[cfg(feature = "full")]
 fn interface_path(path: &str) -> String {
     let dir = if crate::i18n::current().rtl() { craft::i18n::Direction::Rtl } else { craft::i18n::Direction::Ltr };
     craft::i18n::path(path, dir)
@@ -59,24 +63,31 @@ pub(crate) enum AfterPick {
     /// Open the picked document from the window showing `document` ([`WordApp::open_file`]).
     OpenDocument { document: u64 },
     /// Insert the picked picture, or replace the pending Change Picture target.
+    #[cfg(feature = "full")]
     Picture,
     /// Save the document there, then carry on.
+    #[cfg(feature = "full")]
     SaveAs { after: AfterSave, document: u64 },
     /// Save a copy there in this format (`pdf`, `docx`, `png`…).
+    #[cfg(feature = "full")]
     Export { ext: String },
     /// Write the PDF of these print settings there (File › Print › Save these pages as PDF).
+    #[cfg(feature = "full")]
     PrintPdf { settings: Value },
     /// Load the picked CSV/TSV/text file or spreadsheet as the mail-merge recipients (#240, #334).
+    #[cfg(feature = "full")]
     Recipients,
     /// Add every picked font file (#582, #1789).
+    #[cfg(feature = "full")]
     Font,
     /// Import the picked Word bibliography file (`b:Sources`: Word's `Sources.xml`) into the
     /// document through Manage Sources (#2640).
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "full", not(target_arch = "wasm32")))]
     Sources,
 }
 
 /// What to do once Save As has written the document.
+#[cfg(feature = "full")]
 pub(crate) enum AfterSave {
     Nothing,
     /// The AutoSave switch asked for the save: turn AutoSave on.
@@ -99,6 +110,7 @@ pub(crate) enum Asked {
     /// The service shows the dialog; the answer is handled on a later frame.
     Pending,
     /// The service answered on its first poll and the follow-up ran.
+    #[cfg(feature = "full")]
     Done(Result<Value, String>),
 }
 
@@ -127,7 +139,13 @@ impl WordApp {
         let id = self.host.files().pick(req.fallback(fallback));
         self.file_dialog = Some(PendingDialog { id, after });
         // A service that answered at once is handled right away.
-        self.poll_file_dialog().map_or(Asked::Pending, Asked::Done)
+        #[cfg(feature = "full")]
+        return self.poll_file_dialog().map_or(Asked::Pending, Asked::Done);
+        #[cfg(not(feature = "full"))]
+        {
+            let _ = self.poll_file_dialog();
+            Asked::Pending
+        }
     }
 
     /// Pick up the answer of an open file dialog, if it has arrived (every frame, from `logic`),
@@ -136,6 +154,7 @@ impl WordApp {
         let id = self.file_dialog.as_ref()?.id;
         let picked = self.host.files().take_answer(id)?;
         let d = self.file_dialog.take()?;
+        #[cfg(feature = "full")]
         if matches!(d.after, AfterPick::Recipients) {
             self.recipient_list_pending = false;
         }
@@ -151,11 +170,14 @@ impl WordApp {
             Picked::Failed(reason) => {
                 // A plain Save As has no prompt to carry the reason to and Backstage hides the
                 // status bar, so the Save As page says it too.
+                #[cfg(feature = "full")]
                 if matches!(d.after, AfterPick::SaveAs { after: AfterSave::Nothing, .. }) {
                     self.fail_save_as(&reason);
                 } else {
                     self.status(reason);
                 }
+                #[cfg(not(feature = "full"))]
+                self.status(reason);
                 Some(self.finish_pick(d.after, None))
             }
             Picked::Paths(paths) => {
@@ -171,7 +193,7 @@ impl WordApp {
 
     /// Treat the dialog the service is showing as cancelled, e.g. one that never showed up;
     /// returns the format of the export it was for, if any. `ui.fileBrowser` reuses it.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "full", not(target_arch = "wasm32")))]
     pub(crate) fn give_up_file_dialog(&mut self) -> Option<String> {
         let d = self.file_dialog.take()?;
         self.host.files().forget(d.id);
@@ -184,6 +206,7 @@ impl WordApp {
     /// takes more than one; the others use the first.
     fn finish_picks(&mut self, after: AfterPick, picked: Vec<String>) -> Result<Value, String> {
         match after {
+            #[cfg(feature = "full")]
             AfterPick::Font if !picked.is_empty() => self.add_fonts(picked.into_iter().map(|p| (p.clone(), json!({"path": p}))).collect()),
             after => self.finish_pick(after, picked.into_iter().next()),
         }
@@ -192,11 +215,12 @@ impl WordApp {
     /// Do what the dialog was for with files the host handed over as bytes (the browser's picker
     /// reads them: a name and the data, no path). Only Add Font takes more than one.
     fn finish_contents(&mut self, after: AfterPick, mut files: Vec<(String, Vec<u8>)>) -> Result<Value, String> {
-        use wordcraft_engine::cmd::insert::base64_encode;
+        use wordcraft_engine::io::base64_encode;
         if files.is_empty() {
             return self.finish_pick(after, None);
         }
         match after {
+            #[cfg(feature = "full")]
             AfterPick::Font => {
                 let fonts = files.into_iter().map(|(name, bytes)| (name.clone(), json!({"name": name, "data": base64_encode(&bytes)}))).collect();
                 self.add_fonts(fonts)
@@ -210,8 +234,11 @@ impl WordApp {
                         self.ui.backstage = false;
                         r
                     }
+                    #[cfg(feature = "full")]
                     AfterPick::Picture => self.insert_or_change_picture(json!({"data": data})),
+                    #[cfg(feature = "full")]
                     AfterPick::Recipients => self.load_recipients(json!({"path": name, "data": data})),
+                    #[cfg(feature = "full")]
                     _ => Err("this kind of pick answers with a path".into()),
                 }
             }
@@ -221,6 +248,7 @@ impl WordApp {
     /// Add each picked font file, going on past the ones that fail, and say how it went in one
     /// status line (#1789). Each font is its display name and the `font.add` params that read it;
     /// one font keeps `font.add`'s own result and message.
+    #[cfg(feature = "full")]
     fn add_fonts(&mut self, mut fonts: Vec<(String, Value)>) -> Result<Value, String> {
         if fonts.len() == 1 {
             return self.run("font.add", fonts.remove(0).1);
@@ -266,6 +294,7 @@ impl WordApp {
                 self.ui.backstage = false;
                 r
             }
+            #[cfg(feature = "full")]
             AfterPick::Picture => {
                 let Some(path) = picked else {
                     self.change_picture_target = None;
@@ -273,11 +302,12 @@ impl WordApp {
                 };
                 self.insert_or_change_picture(json!({"path": path}))
             }
+            #[cfg(feature = "full")]
             AfterPick::Font => {
                 let Some(path) = picked else { return Ok(json!({"cancelled": true})) };
                 self.add_fonts(vec![(path.clone(), json!({"path": path}))])
             }
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "full", not(target_arch = "wasm32")))]
             AfterPick::Sources => {
                 let Some(path) = picked else { return Ok(json!({"cancelled": true})) };
                 let before = self.session.doc.sources.len();
@@ -293,10 +323,12 @@ impl WordApp {
                 }
                 r
             }
+            #[cfg(feature = "full")]
             AfterPick::Recipients => {
                 let Some(path) = picked else { return Ok(json!({"cancelled": true})) };
                 self.load_recipients(json!({"path": path}))
             }
+            #[cfg(feature = "full")]
             AfterPick::Export { ext } => {
                 let Some(mut path) = picked else {
                     // Cancelled: an earlier refusal is not news any more.
@@ -335,6 +367,7 @@ impl WordApp {
                 }
                 r
             }
+            #[cfg(feature = "full")]
             AfterPick::PrintPdf { settings } => {
                 let Some(path) = picked else { return Ok(json!({"cancelled": true})) };
                 let mut params = settings;
@@ -345,6 +378,7 @@ impl WordApp {
                 }
                 r
             }
+            #[cfg(feature = "full")]
             AfterPick::SaveAs { after, document } => {
                 // The document it was for may wait behind another one: it is shown and saved.
                 if document != self.session.document_id() {
@@ -390,12 +424,14 @@ impl WordApp {
     }
 
     /// Ask where to save, then save there (File › Save As).
+    #[cfg(feature = "full")]
     pub fn save_as_dialog(&mut self) {
         let _ = self.save_as(AfterSave::Nothing);
     }
 
     /// A plain Save As (Backstage's Browse…, AutoSave) failed to write: say so on the status bar,
     /// and on the Save As page, whose render loop skips the status bar while Backstage is open.
+    #[cfg(feature = "full")]
     fn fail_save_as(&mut self, error: &str) {
         self.status(error.to_string());
         self.backstage_state.save_as_error = Some(error.to_string());
@@ -403,22 +439,26 @@ impl WordApp {
 
     /// An export failed or was refused: say so on the status bar and, for the Export page,
     /// there too, since Backstage's render loop skips the status bar (callers drop the result).
+    #[cfg(feature = "full")]
     fn fail_export(&mut self, error: String) -> String {
         self.status(error.clone());
         self.export_error = error.clone();
         error
     }
 
+    #[cfg(feature = "full")]
     fn clear_export_error(&mut self) {
         self.export_error.clear();
     }
 
     /// Drop a Save As page error once a later attempt has actually saved.
+    #[cfg(feature = "full")]
     fn clear_save_as_error(&mut self) {
         self.backstage_state.clear_errors();
     }
 
     /// Ask where to save, save there, then do `after`.
+    #[cfg(feature = "full")]
     pub(crate) fn save_as(&mut self, after: AfterSave) -> Asked {
         let name = self.default_save_name();
         let mut req = PickRequest::save("document").file_name(name.clone()).save_as(true);
@@ -435,6 +475,7 @@ impl WordApp {
 
     /// The user templates folder (#2852): the one File › Options names, else the app's own.
     /// `None` on the web, which has no folders.
+    #[cfg(feature = "full")]
     pub fn user_templates_dir(&self) -> Option<std::path::PathBuf> {
         // The saved folder is checked again (the settings file may have been edited, the folder
         // removed): a network folder is never looked at, and one that's gone gives way to the
@@ -455,6 +496,7 @@ impl WordApp {
     /// File › Save As › Save as Word Template (#2852): ask where to save a `.dotx`, starting in
     /// the user templates folder (the app's own is made on first use), then save there as Save As
     /// does. Returns the folder the dialog starts in.
+    #[cfg(feature = "full")]
     pub(crate) fn save_as_template_dialog(&mut self) -> Option<String> {
         let dir = self.user_templates_dir();
         #[cfg(not(target_arch = "wasm32"))]
@@ -476,6 +518,7 @@ impl WordApp {
     }
 
     /// File › Export: ask where to save a copy in this format, then write it.
+    #[cfg(feature = "full")]
     pub(crate) fn export_dialog(&mut self, ext: &str) {
         let req = self.export_request(ext);
         // A refusal or failure is reported by `finish_pick` itself (Export page and status bar).
@@ -484,6 +527,7 @@ impl WordApp {
 
     /// The request that asks where to save a copy in export format `ext`: the format's name and type,
     /// so the chooser's type menu shows it. Also what Browse in WordCraft… asks again for a pending export.
+    #[cfg(feature = "full")]
     pub(crate) fn export_request(&self, ext: &str) -> PickRequest {
         let file_ext = crate::print_page::export_file_ext(ext).to_string();
         let name = format!("{}.{}", self.title_stem(), file_ext);
@@ -496,6 +540,7 @@ impl WordApp {
 
     /// File › Print › Save these pages as PDF: ask where, then write the pages the print
     /// settings choose.
+    #[cfg(feature = "full")]
     pub(crate) fn print_pdf_dialog(&mut self) {
         let name = format!("{}.pdf", self.title_stem());
         let settings = self.ui.print.params();
@@ -508,18 +553,21 @@ impl WordApp {
         let _ = self.ask_file(req, AfterPick::OpenDocument { document: self.session.document_id() });
     }
 
+    #[cfg(feature = "full")]
     pub(crate) fn pick_picture(&mut self) {
         let req = with_open_filters(PickRequest::open("picture"), "picture");
         let _ = self.ask_file(req, AfterPick::Picture);
     }
 
     /// Pick one or more font files to add (Add Font…).
+    #[cfg(feature = "full")]
     pub(crate) fn pick_font(&mut self) {
         let req = with_open_filters(PickRequest::open_many("font"), "font");
         let _ = self.ask_file(req, AfterPick::Font);
     }
 
     /// Request loading local system installed fonts (web: queryLocalFonts).
+    #[cfg(feature = "full")]
     pub(crate) fn load_system_fonts(&mut self) {
         if let Some(f) = &self.services.load_system_fonts {
             f();
@@ -532,6 +580,7 @@ impl WordApp {
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "full")]
 #[cfg(test)]
 mod picture_dispatch_tests {
     use std::sync::Arc;

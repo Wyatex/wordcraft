@@ -4,6 +4,50 @@ use super::snapshot_types::RunSnapshot;
 use super::{CharProps, CmdError, Document, Fragment, ImeEditOutcome, Pos, Session, StoryRef, Value, document_id_mark};
 use crate::CommandSpec;
 
+/// Commands the preview host may still run while a session is read-only. This is deliberately an
+/// allowlist: some commands are marked pure for undo purposes but still write a file, install a
+/// font, or change a persistent preference.
+pub(super) fn allowed_in_read_only(id: &str) -> bool {
+    id.starts_with("caret.")
+        || id.starts_with("select.")
+        || id.starts_with("table.select")
+        || (id.starts_with("view.") && id != "view.markdownSourceText")
+        || matches!(
+            id,
+            "edit.find"
+                | "edit.findNext"
+                | "edit.findPrevious"
+                | "edit.goto"
+                | "edit.goBack"
+                | "edit.copy"
+                | "edit.clipboardItems"
+                | "document.inspect"
+                | "document.text"
+                | "document.paragraph"
+                | "document.selection"
+                | "document.layout"
+                | "file.open"
+                | "file.info"
+                | "file.inspect"
+                | "font.loadSystem"
+                | "font.list"
+        )
+        || (cfg!(feature = "editing")
+            && matches!(
+                id,
+                "format.state"
+                    | "styles.inspect"
+                    | "review.comments"
+                    | "review.changes"
+                    | "review.issues"
+                    | "review.suggestions"
+                    | "review.nextComment"
+                    | "review.previousComment"
+                    | "review.nextChange"
+                    | "review.previousChange"
+            ))
+}
+
 struct SuccessContext<'a> {
     id: &'a str,
     spec: &'a CommandSpec,
@@ -16,6 +60,7 @@ struct SuccessContext<'a> {
     pushed: bool,
     mutates: bool,
     ime_caret_before: ImeCaretState,
+    #[cfg(feature = "editing")]
     rev_before: u64,
     sel_before: &'a Selection,
 }
@@ -31,6 +76,7 @@ struct ElsewhereContext {
 
 impl Session {
     fn leave_math_for_command(&mut self, id: &str) {
+        #[cfg(feature = "math")]
         if self.math.is_some()
             && (id.starts_with("text.") || id.starts_with("caret.") || id.starts_with("select.") || id.starts_with("edit.paste"))
             && let Some(m) = self.math.take()
@@ -38,6 +84,8 @@ impl Session {
             let off = m.at.off + wordcraft_doc::para::OBJ.len_utf8();
             self.sel = Selection::caret(Pos { off, ..m.at });
         }
+        #[cfg(not(feature = "math"))]
+        let _ = id;
     }
 
     /// Whether the command changed nothing: the document, the selection, the formatting
@@ -46,25 +94,29 @@ impl Session {
     /// A command that changes nothing is not an edit: it adds no undo step, marks no
     /// unsaved changes, forces no relayout and leaves the redo stack alone (#23).
     fn unchanged(&self, doc: &Document, sel: &Selection, column: &Option<ColumnBlock>, pending: &Option<CharProps>) -> bool {
-        doc.same_content(&self.doc)
-            && *sel == self.sel
-            && *column == self.column
-            && *pending == self.pending
-            && !self.md_source.as_ref().is_some_and(|src| src.is_pending())
+        #[cfg(feature = "editing")]
+        let md_pending = self.md_source.as_ref().is_some_and(|src| src.is_pending());
+        #[cfg(not(feature = "editing"))]
+        let md_pending = false;
+        doc.same_content(&self.doc) && *sel == self.sel && *column == self.column && *pending == self.pending && !md_pending
     }
 
     /// A navigated style change is for the Accept or Reject that follows: a command that edits
     /// or moves the selection forgets it.
     fn forget_review_style(&mut self, id: &str, mutates: bool) {
+        #[cfg(feature = "editing")]
         if (mutates && !matches!(id, "review.accept" | "review.reject")) || id.starts_with("caret.") || id.starts_with("select.") {
             self.review_style = None;
         }
+        #[cfg(not(feature = "editing"))]
+        let _ = (id, mutates);
     }
 
     /// Run a command by id with JSON params (the single entry point for the UI, CLI, MCP and
     /// control channel). Mutating commands are undoable; a failed command leaves the document as
     /// it was; a panic inside a command becomes an error.
     pub fn run(&mut self, id: &str, params: &Value) -> Result<Value, CmdError> {
+        #[cfg(feature = "editing")]
         if self.md_source.is_some()
             && let Some(mutates) = self.registry.get(id).map(|spec| spec.mutates)
         {
@@ -100,6 +152,11 @@ impl Session {
         // A rolled-back transaction must not leave a successful application-change signal from a
         // nested command that ran before the failure.
         let pending_application_change_before = self.pending_ime_application_change;
+        let reg = self.registry.clone();
+        let Some(spec) = reg.get(id) else { return Err(CmdError::Unknown(id.to_string())) };
+        if self.read_only && !allowed_in_read_only(id) {
+            return Err(CmdError::Disabled(format!("{id}: the preview session is read-only")));
+        }
         let join = std::mem::take(&mut self.join_next);
         // The equation replacement promise is not a generic undo join: only the command that
         // actually types into the equation may consume it. Any other command discards it.
@@ -107,8 +164,6 @@ impl Session {
         // The body replacement promise is likewise scoped: only the `text.insert` at the
         // selection the deletion left may consume it.
         let ime_text_join = self.ime_text_join.take();
-        let reg = self.registry.clone();
-        let Some(spec) = reg.get(id) else { return Err(CmdError::Unknown(id.to_string())) };
         self.forget_review_style(id, spec.mutates);
         let join = join
             || (equation_join && matches!(id, "equation.type" | "equation.backspace"))
@@ -117,7 +172,10 @@ impl Session {
             return Err(CmdError::Disabled(format!("{id}: {why}")));
         }
         // Restrict Editing: refused outright, or allowed as long as it only edits the exceptions.
+        #[cfg(feature = "editing")]
         let guard = if spec.mutates { crate::cmd::protect::check_before(self, id, params)? } else { false };
+        #[cfg(not(feature = "editing"))]
+        let guard = false;
         // Quick Parts aren't part of the document, so a refused edit puts them back itself (the Spike).
         let blocks_before = guard.then(|| self.building_blocks.clone());
         if spec.mutates && self.doc.settings.protection.as_deref() == Some("trackedChanges") {
@@ -147,6 +205,7 @@ impl Session {
         let ime_epoch_before = spec.mutates.then_some(self.ime_body_epoch);
         // Commands may leave an equation (a whole-body replacement) even after they fail; put
         // the editing session back with the document.
+        #[cfg(feature = "math")]
         let math_before = spec.mutates.then(|| self.math.clone());
         let before_doc: Option<RunSnapshot> = if spec.mutates {
             Some((
@@ -182,15 +241,11 @@ impl Session {
             || (id == "mailings.finish" && crate::p::str(params, "path").is_none());
         let versions_before = replaces_document.then(|| self.versions.clone());
         let identity_before = replaces_document.then(|| {
-            (
-                self.path.clone(),
-                self.file_name.clone(),
-                self.document_id,
-                self.password.clone(),
-                self.dirty,
-                self.bib_style.clone(),
-                self.merge.preview,
-            )
+            #[cfg(feature = "editing")]
+            let preview = self.merge.preview;
+            #[cfg(not(feature = "editing"))]
+            let preview = false;
+            (self.path.clone(), self.file_name.clone(), self.document_id, self.password.clone(), self.dirty, self.bib_style.clone(), preview)
         });
         let typing = spec.id == "text.insert" || spec.id == "equation.type";
         if spec.mutates && !typing {
@@ -212,6 +267,7 @@ impl Session {
             self.typing_open = false;
         }
         // Only the paste right after a tracked cut makes it a move.
+        #[cfg(feature = "editing")]
         if (spec.mutates || matches!(id, "edit.undo" | "edit.undoTo" | "edit.redo")) && !matches!(id, "edit.cut" | "edit.paste" | "edit.pasteSpecial")
         {
             self.pending_move = None;
@@ -223,12 +279,25 @@ impl Session {
         let run = spec.run;
         let mutates = spec.mutates;
         let ime_caret_before = self.current_ime_caret_state();
+        #[cfg(feature = "editing")]
         let rev_before = self.rev;
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match crate::cmd::canvas::member_command(self, id, params) {
-            Some(r) => r,
-            None => crate::cmd::column::dispatch(self, id, mutates, run, params),
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            #[cfg(feature = "editing")]
+            if let Some(r) = crate::cmd::canvas::member_command(self, id, params) {
+                return r;
+            }
+            crate::cmd::column::dispatch(self, id, mutates, run, params)
         }));
+        #[cfg(feature = "editing")]
         let mut result = match result {
+            Ok(r) => r,
+            Err(p) => {
+                let msg = p.downcast_ref::<&str>().map(ToString::to_string).or_else(|| p.downcast_ref::<String>().cloned()).unwrap_or_default();
+                Err(CmdError::Failed(format!("{id} panicked: {msg}")))
+            }
+        };
+        #[cfg(not(feature = "editing"))]
+        let result = match result {
             Ok(r) => r,
             Err(p) => {
                 let msg = p.downcast_ref::<&str>().map(ToString::to_string).or_else(|| p.downcast_ref::<String>().cloned()).unwrap_or_default();
@@ -242,6 +311,7 @@ impl Session {
             );
         }
         // Restrict Editing: outside the exceptions nothing may change.
+        #[cfg(feature = "editing")]
         if result.is_ok()
             && guard
             && let Some((before, ..)) = &before_doc
@@ -262,17 +332,22 @@ impl Session {
                 pushed,
                 mutates,
                 ime_caret_before,
+                #[cfg(feature = "editing")]
                 rev_before,
                 sel_before: &sel_before,
             }),
             Err(e) => {
                 self.ime_edit_outcome = ImeEditOutcome::default();
                 self.pending_ime_application_change = pending_application_change_before;
-                self.autocap = None;
+                #[cfg(feature = "editing")]
+                {
+                    self.autocap = None;
+                }
                 self.prefs.default_language = default_language_before;
                 if let Some(epoch) = ime_epoch_before {
                     self.ime_body_epoch = epoch;
                 }
+                #[cfg(feature = "math")]
                 if let Some(math) = math_before {
                     self.math = math;
                 }
@@ -286,7 +361,12 @@ impl Session {
                     self.password = password;
                     self.dirty = dirty;
                     self.bib_style = bib_style;
-                    self.merge.preview = merge_preview;
+                    #[cfg(feature = "editing")]
+                    {
+                        self.merge.preview = merge_preview;
+                    }
+                    #[cfg(not(feature = "editing"))]
+                    let _ = merge_preview;
                 }
                 if let Some((d, s, h, r, t, ev, c)) = before_doc {
                     self.doc = d;
@@ -343,12 +423,14 @@ impl Session {
             pushed,
             mutates,
             ime_caret_before,
+            #[cfg(feature = "editing")]
             rev_before,
             sel_before,
         } = context;
         let mut no_op = false;
         if spec.mutates {
             // Formatting changed while tracking becomes a formatting revision.
+            #[cfg(feature = "editing")]
             if let Some((before, ..)) = before_doc {
                 crate::cmd::fmt_revisions::record(self, id, before);
             }
@@ -372,7 +454,10 @@ impl Session {
                 self.touch();
             }
             // Glued connectors follow the shapes they join.
+            #[cfg(feature = "editing")]
             let rerouted = crate::cmd::connectors::reroutes_after(id) && crate::cmd::connectors::reroute(self);
+            #[cfg(not(feature = "editing"))]
+            let rerouted = false;
             if rerouted {
                 self.touch();
             }
@@ -396,8 +481,10 @@ impl Session {
                     self.dirty = dirty;
                 }
                 if let Some(rev) = rev_restore {
+                    #[cfg(feature = "editing")]
                     let touched = self.rev;
                     self.restore_rev(rev);
+                    #[cfg(feature = "editing")]
                     crate::cmd::draw::rekey_lasso(self, touched, rev);
                 }
                 if pushed {
@@ -440,6 +527,7 @@ impl Session {
             self.note_edit();
         }
         // Outline view: collapsed headings follow edits; the caret stays where it shows.
+        #[cfg(feature = "editing")]
         crate::cmd::outline::after_command(self, sel_before, self.rev != rev_before);
         // Extra selected objects last until something else is edited or selected; formatting
         // them keeps them selected, as in Word.
@@ -447,6 +535,7 @@ impl Session {
             self.also_selected.clear();
         }
         // A canvas member stays picked while its canvas does and nothing else is selected.
+        #[cfg(feature = "editing")]
         if id != "select.member"
             && (self.sel != *sel_before
                 || id.starts_with("select.")
@@ -480,7 +569,10 @@ impl Session {
             }
             Err(e) => {
                 self.pending_ime_application_change = pending_application_change_before;
-                self.autocap = None;
+                #[cfg(feature = "editing")]
+                {
+                    self.autocap = None;
+                }
                 self.prefs.default_language = default_language_before;
                 if self.is_open(home) {
                     let _ = self.switch_to(home);
@@ -505,5 +597,51 @@ impl Session {
             }
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod read_only_policy_tests {
+    use serde_json::json;
+
+    use super::{Document, Session, StoryRef, allowed_in_read_only};
+
+    #[test]
+    fn allowlist_permits_preview_and_rejects_edits_and_source() {
+        for id in
+            ["edit.find", "edit.findNext", "edit.findPrevious", "edit.goto", "edit.copy", "select.text", "caret.right", "view.zoom", "file.open"]
+        {
+            assert!(allowed_in_read_only(id), "{id} should be allowed in read-only mode");
+        }
+        for id in ["view.markdownSourceText", "text.insert", "text.backspace", "format.bold", "file.save", "insert.equation"] {
+            assert!(!allowed_in_read_only(id), "{id} should be rejected in read-only mode");
+        }
+    }
+
+    #[cfg(not(feature = "editing"))]
+    #[test]
+    fn non_editing_build_locks_read_only_on_and_blocks_mutations() {
+        let mut s = Session::new(Document::from_text("hello world"));
+        assert!(s.read_only());
+        s.set_read_only(false);
+        assert!(s.read_only());
+        assert!(s.run("text.insert", &json!({"text": "x"})).is_err());
+        assert!(s.run("view.markdownSourceText", &json!({})).is_err());
+        s.run("edit.find", &json!({"text": "world"})).expect("find works in read-only preview");
+        assert!(!s.find.results.is_empty());
+        assert_eq!(s.doc.plain_text(StoryRef::Body), "hello world");
+    }
+
+    #[cfg(feature = "editing")]
+    #[test]
+    fn read_only_session_allows_find_and_copy_but_blocks_edit_and_source() {
+        let mut s = Session::new(Document::from_text("hello world"));
+        s.set_read_only(true);
+        assert!(s.run("text.insert", &json!({"text": "x"})).is_err());
+        assert!(s.run("view.markdownSourceText", &json!({})).is_err());
+        s.run("edit.find", &json!({"text": "world"})).expect("find works in read-only mode");
+        assert!(!s.find.results.is_empty());
+        s.run("edit.copy", &json!({})).expect("copy works in read-only mode");
+        assert_eq!(s.doc.plain_text(StoryRef::Body), "hello world");
     }
 }

@@ -1,10 +1,14 @@
 // PLAN: the Insert key has no editor input, so the overtype switch is the shortcut layer's (shell-w6).
-use craft::behavior::editor::{EditorInput, SurroundingUnit};
+use craft::behavior::editor::EditorInput;
+#[cfg(feature = "full")]
+use craft::behavior::editor::SurroundingUnit;
 use craft::behavior::intent::{EditCommand, Granularity, MoveMods, NavMove};
+#[cfg(feature = "full")]
 use craft::platform::clipboard::{RGBA8, URI_LIST};
 use craft::ui::canvas::ToolPass;
 use craft::ui::runtime::commands::{ClipItem, ClipboardHandle};
 
+#[cfg(feature = "full")]
 use super::ime::{
     MAX_IME_COMMIT_BYTES, MAX_IME_PREEDIT_BYTES, delete_in_equation, delete_surrounding, delete_surrounding_bytes, ime_report, ime_stamp,
     note_automatic_change,
@@ -26,6 +30,7 @@ enum ReplacementDrop {
 
 /// State carried across the inputs of one pass's list; never stored.
 struct Batch {
+    #[cfg(feature = "full")]
     drop_equation_replacement: ReplacementDrop,
     interrupted_preedit: bool,
     interrupted_replacement: ReplacementDrop,
@@ -36,6 +41,7 @@ struct Batch {
 /// The page's editor input of one pass: text, editing keys, clipboard and IME, in the order they
 /// arrived. While keytips are showing every key belongs to them, so nothing here runs.
 pub fn page_input(app: &mut WordApp, inputs: &[EditorInput], pass: &ToolPass, ctx: &egui::Context) {
+    #[cfg(feature = "full")]
     if app.keytips_active {
         return;
     }
@@ -44,9 +50,13 @@ pub fn page_input(app: &mut WordApp, inputs: &[EditorInput], pass: &ToolPass, ct
     if std::mem::take(&mut app.canvas.ime_interrupt_now) {
         pass.ime_application_change(ctx);
     }
+    #[cfg(feature = "full")]
     let window = app.windows.shown();
     if app.session.view.read_mode {
+        #[cfg(feature = "full")]
         read_mode_input(app, ctx, inputs, window);
+        #[cfg(not(feature = "full"))]
+        read_mode_input(app, ctx, inputs, 0);
         return;
     }
     // The erased text's formatting is carried only for a replacement in this list. The undo join
@@ -61,6 +71,7 @@ pub fn page_input(app: &mut WordApp, inputs: &[EditorInput], pass: &ToolPass, ct
         app.canvas.ime_join_text = None;
     }
     let mut batch = Batch {
+        #[cfg(feature = "full")]
         drop_equation_replacement: ReplacementDrop::None,
         interrupted_preedit: std::mem::take(&mut app.canvas.ime_interrupted_preedit),
         interrupted_replacement: ReplacementDrop::None,
@@ -69,6 +80,7 @@ pub fn page_input(app: &mut WordApp, inputs: &[EditorInput], pass: &ToolPass, ct
     for e in inputs {
         // A key closed the window (Mod+W) or brought another forward: the pass's other inputs
         // were typed in this one and are dropped.
+        #[cfg(feature = "full")]
         if app.windows.shown() != window {
             break;
         }
@@ -81,19 +93,22 @@ pub fn page_input(app: &mut WordApp, inputs: &[EditorInput], pass: &ToolPass, ct
             // replacement the deletion promised (even when the key runs no command).
             app.session.clear_ime_text_join();
         }
-        // Escape stops a running Ink Replay before anything else takes it.
-        if matches!(e, EditorInput::Cancel) && crate::ink::stop_replay(app) {
-            continue;
-        }
-        // Enter and Escape leave crop mode keeping the crop (`crop` docs). The canvas takes the page's
-        // keys as editor input before the crop overlay's own pass reads its Submit and Cancel, so they
-        // end it here, and neither types a paragraph over the selected picture.
-        if matches!(e, EditorInput::Newline | EditorInput::Cancel) && crate::crop::active(app).is_some() {
-            crate::crop::leave(app);
-            continue;
-        }
-        if drop_refused_replacement(app, e, &mut batch) || equation_input(app, ctx, pass, e, &mut batch) {
-            continue;
+        #[cfg(feature = "full")]
+        {
+            // Escape stops a running Ink Replay before anything else takes it.
+            if matches!(e, EditorInput::Cancel) && crate::ink::stop_replay(app) {
+                continue;
+            }
+            // Enter and Escape leave crop mode keeping the crop (`crop` docs). The canvas takes the page's
+            // keys as editor input before the crop overlay's own pass reads its Submit and Cancel, so they
+            // end it here, and neither types a paragraph over the selected picture.
+            if matches!(e, EditorInput::Newline | EditorInput::Cancel) && crate::crop::active(app).is_some() {
+                crate::crop::leave(app);
+                continue;
+            }
+            if !app.session.read_only() && (drop_refused_replacement(app, e, &mut batch) || equation_input(app, ctx, pass, e, &mut batch)) {
+                continue;
+            }
         }
         handle_input(app, ctx, pass, e, &mut batch);
     }
@@ -123,7 +138,10 @@ fn is_key_input(e: &EditorInput) -> bool {
 /// Document button or Escape returns to Print Layout before editing; page turns are the reading
 /// view's own keys.
 fn read_mode_input(app: &mut WordApp, ctx: &egui::Context, inputs: &[EditorInput], window: u64) {
+    #[cfg(not(feature = "full"))]
+    let _ = window;
     for e in inputs {
+        #[cfg(feature = "full")]
         if app.windows.shown() != window {
             break;
         }
@@ -200,6 +218,7 @@ fn stale_composition(app: &mut WordApp, e: &EditorInput, b: &mut Batch) -> bool 
 }
 
 /// The replacement paired with a refused equation deletion is dropped.
+#[cfg(feature = "full")]
 fn drop_refused_replacement(app: &mut WordApp, e: &EditorInput, b: &mut Batch) -> bool {
     // The replacement is the input immediately after the refused deletion: an `ImeCommit` and its
     // `Text`, or the adjacent `Text` + `ImeCommit` + `Text` run some platforms use. Any
@@ -221,6 +240,7 @@ fn drop_refused_replacement(app: &mut WordApp, e: &EditorInput, b: &mut Batch) -
 }
 
 /// Editing an equation: text and editing keys go into it.
+#[cfg(feature = "full")]
 fn equation_input(app: &mut WordApp, ctx: &egui::Context, pass: &ToolPass, e: &EditorInput, b: &mut Batch) -> bool {
     if app.session.math.is_none() {
         return false;
@@ -325,6 +345,7 @@ fn equation_input(app: &mut WordApp, ctx: &egui::Context, pass: &ToolPass, e: &E
 }
 
 /// An input method's commit into the equation being edited.
+#[cfg(feature = "full")]
 fn equation_commit(app: &mut WordApp, ctx: &egui::Context, pass: &ToolPass, text: &str) {
     if text.is_empty() {
         // An empty commit is not the replacement for a preceding deletion.
@@ -355,12 +376,14 @@ fn equation_commit(app: &mut WordApp, ctx: &egui::Context, pass: &ToolPass, text
 }
 
 /// The input method's cursor as chars of its composition, from the bytes the engine reports.
+#[cfg(feature = "full")]
 fn chars_range(text: &str, r: &std::ops::Range<usize>) -> std::ops::Range<usize> {
     let chars = |at: usize| text.get(..at).map_or_else(|| text.chars().count(), |s| s.chars().count());
     chars(r.start)..chars(r.end)
 }
 
 /// A committed IME string.
+#[cfg(feature = "full")]
 fn ime_commit(app: &mut WordApp, ctx: &egui::Context, pass: &ToolPass, text: &str) {
     app.canvas.ime_preedit.clear();
     app.canvas.ime_preedit_range = None;
@@ -439,6 +462,7 @@ fn move_command(mv: NavMove, by: Granularity) -> Option<&'static str> {
 }
 
 /// The physical key a move stands for, for a selected object's own key handling.
+#[cfg(feature = "full")]
 fn move_key(mv: NavMove) -> Option<Key> {
     Some(match mv {
         NavMove::Back => Key::ArrowLeft,
@@ -455,6 +479,27 @@ fn move_key(mv: NavMove) -> Option<Key> {
 
 /// Everything else: typed text, IME, clipboard and keys.
 fn handle_input(app: &mut WordApp, ctx: &egui::Context, pass: &ToolPass, e: &EditorInput, b: &mut Batch) {
+    if app.session.read_only() {
+        match e {
+            EditorInput::Move(mv, m) => move_input(app, *mv, *m),
+            EditorInput::Cancel => cancel(app, ctx),
+            EditorInput::Edit(cmd @ (EditCommand::Copy | EditCommand::SelectAll)) => edit_command(app, ctx, *cmd),
+            EditorInput::ImeCommit => {
+                app.canvas.ime_preedit.clear();
+                app.canvas.ime_preedit_range = None;
+                b.committing = true;
+            }
+            EditorInput::Text(_) if std::mem::take(&mut b.committing) => {
+                app.canvas.ime_preedit.clear();
+                app.canvas.ime_preedit_range = None;
+            }
+            _ => {}
+        }
+        return;
+    }
+    #[cfg(not(feature = "full"))]
+    let _ = (pass, b);
+    #[cfg(feature = "full")]
     match e {
         EditorInput::Text(t) => {
             if std::mem::take(&mut b.committing) {
@@ -537,14 +582,24 @@ fn handle_input(app: &mut WordApp, ctx: &egui::Context, pass: &ToolPass, e: &Edi
         EditorInput::Edit(cmd) => edit_command(app, ctx, *cmd),
         _ => {}
     }
+    #[cfg(not(feature = "full"))]
+    match e {
+        EditorInput::Move(mv, m) => move_input(app, *mv, *m),
+        EditorInput::Cancel => cancel(app, ctx),
+        EditorInput::Edit(cmd @ (EditCommand::Copy | EditCommand::SelectAll)) => edit_command(app, ctx, *cmd),
+        _ => {}
+    }
 }
 
 fn move_input(app: &mut WordApp, mv: NavMove, m: MoveMods) {
-    let mods = Modifiers { shift: m.extend, command: m.lead, ..Modifiers::NONE };
-    if let Some(key) = move_key(mv)
-        && crate::objects::key(app, key, mods)
+    #[cfg(feature = "full")]
     {
-        return;
+        let mods = Modifiers { shift: m.extend, command: m.lead, ..Modifiers::NONE };
+        if let Some(key) = move_key(mv)
+            && crate::objects::key(app, key, mods)
+        {
+            return;
+        }
     }
     if let Some(id) = move_command(mv, m.by) {
         let _ = app.run(id, json!({"extend": m.extend}));
@@ -552,6 +607,18 @@ fn move_input(app: &mut WordApp, mv: NavMove, m: MoveMods) {
 }
 
 fn edit_command(app: &mut WordApp, ctx: &egui::Context, cmd: EditCommand) {
+    if app.session.read_only() {
+        match cmd {
+            EditCommand::Copy => {
+                let _ = app.run("edit.copy", json!({}));
+            }
+            EditCommand::SelectAll => {
+                let _ = app.run("select.all", json!({}));
+            }
+            _ => {}
+        }
+        return;
+    }
     match cmd {
         EditCommand::Cut => {
             if let Ok(r) = app.run("edit.cut", json!({})) {
@@ -580,6 +647,7 @@ fn edit_command(app: &mut WordApp, ctx: &egui::Context, cmd: EditCommand) {
 
 /// Paste from the clipboard: copied picture files insert as pictures (#45), text and a clipboard
 /// picture go through `edit.paste`.
+#[cfg(feature = "full")]
 fn paste(app: &mut WordApp, ctx: &egui::Context) {
     let clip = ClipboardHandle::of(ctx);
     let text = clip.read_text().ok().flatten();
@@ -595,6 +663,9 @@ fn paste(app: &mut WordApp, ctx: &egui::Context) {
     let _ = app.run("edit.paste", params);
 }
 
+#[cfg(not(feature = "full"))]
+fn paste(_app: &mut WordApp, _ctx: &egui::Context) {}
+
 /// Escape: the nearest thing that takes it first (a painter, a pen, a table pen, an object, a text
 /// box, a header), then Focus or Full Screen.
 fn cancel(app: &mut WordApp, ctx: &egui::Context) {
@@ -609,31 +680,34 @@ fn cancel(app: &mut WordApp, ctx: &egui::Context) {
         app.session.painter = None;
         return;
     }
-    // Escape puts the pen or eraser down (back to selecting).
-    if app.session.view.draw.mode != wordcraft_engine::cmd::draw::DrawMode::Select {
-        let _ = app.run("draw.select", json!({}));
-        return;
-    }
-    if crate::table_pen::stop(app) {
-        return;
-    }
-    if crate::objects::key(app, Key::Escape, Modifiers::NONE) {
-        return;
-    }
-    // Escape in a text box (or WordArt) selects the box itself, so Delete then removes
-    // it (#1538). The anchor position is just after the box's object character.
-    if crate::canvas::in_text_box(app)
-        && let wordcraft_doc::StoryRef::Part(id) = app.session.sel.focus.story
-        && let Some(end) = app.session.doc.text_box_anchor(id)
-        && let Some(off) = end.off.checked_sub(wordcraft_doc::para::OBJ.len_utf8())
+    #[cfg(feature = "full")]
     {
-        let start = wordcraft_doc::Pos { off, ..end.clone() };
-        let _ = app.run("select.range", json!({"anchor": start, "focus": end}));
-        return;
-    }
-    if matches!(app.session.sel.focus.story, wordcraft_doc::StoryRef::Part(_)) && app.session.sel.is_collapsed() {
-        let _ = app.run("insert.closeHeader", json!({}));
-        return;
+        // Escape puts the pen or eraser down (back to selecting).
+        if app.session.view.draw.mode != wordcraft_engine::cmd::draw::DrawMode::Select {
+            let _ = app.run("draw.select", json!({}));
+            return;
+        }
+        if crate::table_pen::stop(app) {
+            return;
+        }
+        if crate::objects::key(app, Key::Escape, Modifiers::NONE) {
+            return;
+        }
+        // Escape in a text box (or WordArt) selects the box itself, so Delete then removes
+        // it (#1538). The anchor position is just after the box's object character.
+        if crate::canvas::in_text_box(app)
+            && let wordcraft_doc::StoryRef::Part(id) = app.session.sel.focus.story
+            && let Some(end) = app.session.doc.text_box_anchor(id)
+            && let Some(off) = end.off.checked_sub(wordcraft_doc::para::OBJ.len_utf8())
+        {
+            let start = wordcraft_doc::Pos { off, ..end.clone() };
+            let _ = app.run("select.range", json!({"anchor": start, "focus": end}));
+            return;
+        }
+        if matches!(app.session.sel.focus.story, wordcraft_doc::StoryRef::Part(_)) && app.session.sel.is_collapsed() {
+            let _ = app.run("insert.closeHeader", json!({}));
+            return;
+        }
     }
     if leave_full_screen(app, ctx, Key::Escape, Modifiers::NONE, true) {
         return;
@@ -680,8 +754,15 @@ pub(super) fn leave_full_screen(app: &mut WordApp, ctx: &egui::Context, key: Key
     if ctx.input(|i| i.pointer.any_down()) {
         return false;
     }
-    let c = &app.canvas;
-    if c.object_gesture().is_some() || c.table_resize.is_some() || crate::table_mouse::dragging(app) || c.link_from.is_some() {
+    #[cfg(feature = "full")]
+    {
+        let c = &app.canvas;
+        if c.object_gesture().is_some() || c.table_resize.is_some() || crate::table_mouse::dragging(app) || c.link_from.is_some() {
+            return false;
+        }
+    }
+    #[cfg(not(feature = "full"))]
+    if app.canvas.link_from.is_some() {
         return false;
     }
     if canvas && !app.session.sel.is_collapsed() {
@@ -698,6 +779,7 @@ pub(super) fn leave_full_screen(app: &mut WordApp, ctx: &egui::Context, key: Key
 /// `ime` says this text came from an accepted IME commit. Only then is a receipt taken, and only
 /// around the insertion itself: a transformation the engine performs (AutoCorrect, AutoFormat)
 /// makes the frame an application change instead.
+#[cfg(feature = "full")]
 fn type_text(app: &mut WordApp, pass: &ToolPass, ctx: &egui::Context, text: &str, ime: bool) {
     let before = ime.then(|| ime_stamp(app));
     // Where the text lands, so a quote can be checked against what the engine actually inserted.
@@ -753,6 +835,7 @@ fn type_text(app: &mut WordApp, pass: &ToolPass, ctx: &egui::Context, text: &str
 ///
 /// A smart quote, an AutoCorrect replacement or a relocated insert makes this false: the edit is
 /// AutoFormat work, not the input method's own change.
+#[cfg(feature = "full")]
 fn inserted_literal_at(app: &WordApp, text: &str, start: &wordcraft_doc::Pos) -> bool {
     let Some(para) = app.session.doc.para_at(start) else { return false };
     let Some(end) = start.off.checked_add(text.len()) else { return false };

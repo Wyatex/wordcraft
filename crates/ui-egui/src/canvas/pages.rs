@@ -9,7 +9,11 @@ use super::{DocLayout, Hash, Hasher, Page, Placed, Pos, Rect, WordApp, json};
 pub(super) fn view_key(app: &WordApp, dim_body: bool, hidden: Option<&Pos>) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     let v = &app.session.view;
-    (v.marks, app.session.prefs.marks, v.show_markup, v.dark_mode, wordcraft_render::DARK_PAPER, v.hide_ink, v.draw.replay).hash(&mut h);
+    #[cfg(feature = "full")]
+    let draw_replay = v.draw.replay;
+    #[cfg(not(feature = "full"))]
+    let draw_replay = false;
+    (v.marks, app.session.prefs.marks, v.show_markup, v.dark_mode, wordcraft_render::DARK_PAPER, v.hide_ink, draw_replay).hash(&mut h);
     (v.read_mode, v.read_page_color, app.session.prefs.paper_color).hash(&mut h);
     app.session.prefs.markup.hash(&mut h);
     dim_body.hash(&mut h);
@@ -156,7 +160,11 @@ pub(super) fn page_render_options(app: &WordApp, dim_body: bool) -> wordcraft_re
     opts.display.placeholders = true;
     opts.display.markup = app.session.view.show_markup;
     // Ink Replay draws the ink itself, stroke by stroke, over pages without it.
-    opts.display.hide_ink = app.session.view.hide_ink || app.session.view.draw.replay;
+    #[cfg(feature = "full")]
+    let draw_replay = app.session.view.draw.replay;
+    #[cfg(not(feature = "full"))]
+    let draw_replay = false;
+    opts.display.hide_ink = app.session.view.hide_ink || draw_replay;
     opts.display.revisions = app.session.prefs.markup.clone();
     opts.dark = dark_page(app);
     opts.dark_paper = wordcraft_render::DARK_PAPER;

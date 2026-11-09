@@ -8,10 +8,14 @@ description = "WordCraft DOCX (OOXML WordprocessingML) reader and writer"
 [lints]
 workspace = true
 
+[features]
+default = ["write"]
+write = []
+
 [dependencies]
 craft-docx = { workspace = true }
 craft-wordmodel = { workspace = true }
-wordcraft-doc = { workspace = true }
+wordcraft-doc = { path = "../doc", default-features = false }
 craft-xml = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

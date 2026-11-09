@@ -161,6 +161,7 @@ pub(crate) fn open_discard_recovery(app: &mut WordApp, id: &str, name: &str) -> 
 }
 
 /// The open discard-recovery prompt, for `ui.recoveryDiscard {answer}` to answer through the host.
+#[cfg(feature = "full")]
 pub(crate) fn pending_discard_recovery(app: &WordApp) -> Option<DialogId> {
     // PLAN: assumed `OpenDialog { id: DialogId, key: Option<String> }` (`open_dialogs()`).
     app.dialog_host.open_dialogs().into_iter().find(|d| d.key.as_deref() == Some("discardRecovery")).map(|d| d.id)

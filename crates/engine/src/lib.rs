@@ -6,8 +6,10 @@
 //! CLI, the JSON control channel and the MCP server all call [`Session::run`].
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+#[cfg(feature = "editing")]
 pub mod catalog;
 pub mod cmd;
+#[cfg(feature = "proofing")]
 pub mod custom_dict;
 pub(crate) mod doc_state;
 pub mod file_access;
@@ -16,16 +18,24 @@ pub mod io;
 mod io_ext;
 pub mod keymap;
 pub(crate) mod locale;
+#[cfg(feature = "math")]
 pub mod math_gallery;
+#[cfg(feature = "proofing")]
 pub mod packs;
 pub(crate) mod prefs;
+#[cfg(feature = "pdf")]
 pub mod print;
+#[cfg(feature = "editing")]
 pub mod recovery;
+#[cfg(feature = "editing")]
 pub mod ribbon;
+#[cfg(feature = "editing")]
 pub mod sample;
 mod session;
 pub(crate) mod snapshot;
+#[cfg(feature = "editing")]
 pub mod speech;
+#[cfg(any(feature = "write", feature = "pdf"))]
 pub mod strict;
 pub(crate) mod view;
 
@@ -35,11 +45,14 @@ use serde_json::Value;
 
 pub use io::Password;
 pub use locale::{set_bookmark_error, set_reference_error, system_locale};
+#[cfg(feature = "editing")]
 pub use ribbon::RibbonLayout;
 pub use session::{
-    CellRange, ColumnBlock, DocInfo, DocState, EditSnapshot, FindState, MathEdit, Prefs, Selection, Session, StylesPaneDock, UNDO_LIST_MAX,
-    ViewState, WindowView, blank_document, next_math_session, set_system_locale,
+    CellRange, ColumnBlock, DocInfo, DocState, EditSnapshot, FindState, Prefs, Selection, Session, StylesPaneDock, UNDO_LIST_MAX, ViewState,
+    WindowView, blank_document, set_system_locale,
 };
+#[cfg(feature = "math")]
+pub use session::{MathEdit, next_math_session};
 /// The outcome a command reports for IME receipt classification.
 ///
 /// A command that can be called by an input method must classify its committed effects. Only a
@@ -72,6 +85,7 @@ pub const MAX_EQUATION_DELETE_UNITS: usize = 64;
 pub use wordcraft_doc as doc;
 pub use wordcraft_geom::Region;
 pub use wordcraft_layout as layout;
+#[cfg(feature = "proofing")]
 pub use wordcraft_proof as proof;
 pub use wordcraft_render as render;
 
@@ -209,5 +223,6 @@ pub mod p {
     }
 }
 
+#[cfg(feature = "full")]
 #[cfg(test)]
 mod tests;

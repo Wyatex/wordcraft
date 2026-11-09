@@ -1,10 +1,17 @@
+#[cfg(not(feature = "editing"))]
+use super::Session;
+#[cfg(feature = "editing")]
 use super::cells::{cell, selected_cells};
+#[cfg(feature = "editing")]
 use super::clear::{cell_prefix, guard_delete, text_spans};
+#[cfg(feature = "editing")]
 use super::layout::{fix_caret, sync_cell_widths};
+#[cfg(feature = "editing")]
 use super::{Block, CmdError, CmdResult, Paragraph, Pos, Selection, Session, Value, json, p, sel_result};
 use wordcraft_doc::Path;
 
 /// Insert Above / Below: rows like the caret's, as many as the selection spans; the caret goes into the first.
+#[cfg(feature = "editing")]
 pub(in crate::cmd) fn row(s: &mut Session, below: bool) -> CmdResult {
     let (tp, r, c) = cell(s)?;
     let cells = selected_cells(s);
@@ -17,6 +24,7 @@ pub(in crate::cmd) fn row(s: &mut Session, below: bool) -> CmdResult {
 }
 
 /// Insert Left / Right: a column beside the caret's cell; the caret goes into it.
+#[cfg(feature = "editing")]
 pub(in crate::cmd) fn col(s: &mut Session, right: bool) -> CmdResult {
     let (tp, r, c) = cell(s)?;
     let t = s.doc.table_mut(s.sel.focus.story, &tp)?;
@@ -36,6 +44,7 @@ pub(in crate::cmd) fn col(s: &mut Session, right: bool) -> CmdResult {
     fix_caret(s, &tp, r, if right { c + 1 } else { c })
 }
 
+#[cfg(feature = "editing")]
 pub(super) fn del_row(s: &mut Session, _: &Value) -> CmdResult {
     let (tp, r, _) = cell(s)?;
     let rows: std::collections::BTreeSet<usize> = selected_cells(s).into_iter().map(|x| x.0).collect();
@@ -55,6 +64,7 @@ pub(super) fn del_row(s: &mut Session, _: &Value) -> CmdResult {
     fix_caret(s, &tp, r, 0)
 }
 
+#[cfg(feature = "editing")]
 pub(super) fn del_col(s: &mut Session, _: &Value) -> CmdResult {
     let (tp, r, c) = cell(s)?;
     let cells = selected_cells(s);
@@ -103,6 +113,7 @@ pub(super) fn del_col(s: &mut Session, _: &Value) -> CmdResult {
     fix_caret(s, &tp, r, c.saturating_sub(1))
 }
 
+#[cfg(feature = "editing")]
 pub(super) fn del_table(s: &mut Session, _: &Value) -> CmdResult {
     let (tp, _, _) = cell(s)?;
     delete_table_at(s, &tp)
@@ -122,6 +133,7 @@ pub(in crate::cmd) fn selected_table(s: &Session) -> Option<Path> {
 }
 
 /// Delete Table for the table at `tp` (in the selection's story): tracked when Track Changes is on.
+#[cfg(feature = "editing")]
 pub(in crate::cmd) fn delete_table_at(s: &mut Session, tp: &Path) -> CmdResult {
     let tp = tp.clone();
     let story = s.sel.focus.story;
@@ -134,6 +146,7 @@ pub(in crate::cmd) fn delete_table_at(s: &mut Session, tp: &Path) -> CmdResult {
     sel_result(s)
 }
 
+#[cfg(feature = "editing")]
 pub(super) fn merge(s: &mut Session, _: &Value) -> CmdResult {
     let (tp, _, _) = cell(s)?;
     let cells = selected_cells(s);
@@ -153,6 +166,7 @@ pub(super) fn merge(s: &mut Session, _: &Value) -> CmdResult {
 
 /// The selected cells as Split Cells sees them: one entry per cell, a vertically merged cell
 /// once (its top row), each as (top row, grid column).
+#[cfg(feature = "editing")]
 pub fn split_targets(s: &Session) -> Vec<(usize, usize)> {
     let Ok((tp, _, _)) = cell(s) else { return Vec::new() };
     let Some(t) = s.doc.table(s.sel.focus.story, &tp) else { return Vec::new() };
@@ -168,6 +182,7 @@ pub fn split_targets(s: &Session) -> Vec<(usize, usize)> {
 
 /// Split Cells: the caret's cell, or the selected cells (merged first unless `mergeFirst` is
 /// false), into `columns` × `rows` cells.
+#[cfg(feature = "editing")]
 pub(super) fn split(s: &mut Session, v: &Value) -> CmdResult {
     let cols = p::u64(v, "columns").unwrap_or(2).clamp(1, 63) as usize;
     let rows = p::u64(v, "rows").unwrap_or(1).clamp(1, 63) as usize;
@@ -226,6 +241,7 @@ pub(super) fn split(s: &mut Session, v: &Value) -> CmdResult {
     fix_caret(s, &tp, top, c)
 }
 
+#[cfg(feature = "editing")]
 pub(super) fn split_table(s: &mut Session, _: &Value) -> CmdResult {
     let (tp, r, _) = cell(s)?;
     if r == 0 {

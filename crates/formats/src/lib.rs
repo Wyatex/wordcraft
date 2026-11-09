@@ -10,15 +10,20 @@
 //! depth-limited and sizes are capped.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+#[cfg(feature = "write")]
 pub mod comments;
 pub mod html;
+#[cfg(feature = "latex")]
 pub mod latex;
 pub mod markdown;
+#[cfg(feature = "math")]
 pub mod mathml;
 pub mod mht;
 pub mod model;
+#[cfg(feature = "odt")]
 pub mod odt;
 pub mod rtf;
+#[cfg(feature = "sheet")]
 pub mod sheet;
 pub mod txt;
 
@@ -41,8 +46,11 @@ pub fn import(ext: &str, bytes: &[u8]) -> Option<Result<Document, String>> {
         "html" | "htm" | "xhtml" => Ok(html::import_page(&html::decode(bytes), &|_| None)),
         "mht" | "mhtml" => Ok(mht::import(bytes)),
         "rtf" => rtf::import(bytes),
+        #[cfg(feature = "odt")]
         "odt" | "ott" => odt::import(bytes),
+        #[cfg(feature = "odt")]
         "fodt" => odt::import_flat(bytes),
+        #[cfg(feature = "latex")]
         "tex" | "latex" | "ltx" => Ok(latex::import(bytes)),
         _ => return None,
     };
@@ -58,7 +66,9 @@ pub fn import(ext: &str, bytes: &[u8]) -> Option<Result<Document, String>> {
 pub fn import_on(ext: &str, bytes: &[u8], page: &wordcraft_doc::SectionProps) -> Option<Result<Document, String>> {
     let ext = ext.trim_start_matches('.').to_ascii_lowercase();
     let mut doc = match ext.as_str() {
+        #[cfg(feature = "odt")]
         "odt" | "ott" => return Some(odt::import_on(bytes, page)),
+        #[cfg(feature = "odt")]
         "fodt" => return Some(odt::import_flat_on(bytes, page)),
         "txt" | "text" => txt::import_on(bytes, page),
         "md" | "markdown" => markdown::import_on(&txt::decode(bytes), page),
@@ -71,6 +81,7 @@ pub fn import_on(ext: &str, bytes: &[u8], page: &wordcraft_doc::SectionProps) ->
 }
 
 /// Export `doc` in the format named by `ext`. `None` = not our format.
+#[cfg(feature = "write")]
 pub fn export(ext: &str, doc: &Document) -> Option<Result<Vec<u8>, String>> {
     let ext = ext.trim_start_matches('.').to_ascii_lowercase();
     Some(match ext.as_str() {
@@ -78,15 +89,20 @@ pub fn export(ext: &str, doc: &Document) -> Option<Result<Vec<u8>, String>> {
         "md" | "markdown" => Ok(markdown::export(doc).into_bytes()),
         "html" | "htm" | "xhtml" => Ok(html::export(doc).into_bytes()),
         "rtf" => Ok(rtf::export(doc).into_bytes()),
+        #[cfg(feature = "odt")]
         "odt" => odt::export(doc),
+        #[cfg(feature = "odt")]
         "ott" => odt::export_template(doc),
+        #[cfg(feature = "odt")]
         "fodt" => odt::export_flat(doc),
+        #[cfg(feature = "latex")]
         "tex" | "latex" | "ltx" => Ok(latex::export(doc).into_bytes()),
         _ => return None,
     })
 }
 
 /// How [`export_with`] writes a copy.
+#[cfg(feature = "write")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ExportOptions {
     /// Print Markup: HTML, Markdown and plain text end with the document's comments (who wrote
@@ -96,6 +112,7 @@ pub struct ExportOptions {
 }
 
 /// [`export`] with options.
+#[cfg(feature = "write")]
 pub fn export_with(ext: &str, doc: &Document, opts: &ExportOptions) -> Option<Result<Vec<u8>, String>> {
     let out = export(ext, doc)?;
     if !opts.comments {

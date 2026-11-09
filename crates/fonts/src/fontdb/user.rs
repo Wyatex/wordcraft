@@ -648,15 +648,16 @@ fn write_unique(dir: &Path, name: &str, bytes: &[u8]) -> std::io::Result<PathBuf
     // would otherwise carry the write to a file outside the folder. A leftover from a crash (or
     // such a link) is unlinked, not followed, and the create tried once more.
     let create = || std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp);
-    let mut file = match create() {
-        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-            std::fs::remove_file(&tmp)?;
-            create()?
-        }
-        r => r?,
+    let written = {
+        let mut file = match create() {
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                std::fs::remove_file(&tmp)?;
+                create()?
+            }
+            r => r?,
+        };
+        std::io::Write::write_all(&mut file, bytes)
     };
-    let written = std::io::Write::write_all(&mut file, bytes);
-    drop(file);
     if let Err(e) = written.and_then(|()| std::fs::rename(&tmp, &path)) {
         let _ = std::fs::remove_file(&tmp);
         return Err(e);

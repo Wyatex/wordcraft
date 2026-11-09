@@ -7,12 +7,17 @@
 
 use std::borrow::Cow;
 
+#[cfg(feature = "image")]
 use craft_image_codecs::{
     ChannelLayout, CodecError, DecodeOptions, EncodeOptions, Format as CodecFormat, Image as CodecImage, Limits as CodecLimits, RasterColorType,
     SampleType, bmp_probe, decode_as_with, detect, encode as codec_encode, inspect_raster, jpeg_worst_case_coefficients, png_probe, probe_size,
     webp_probe,
 };
-use image::{DynamicImage, ImageBuffer, ImageFormat};
+use image::ImageFormat;
+#[cfg(all(feature = "slim-image", not(feature = "image")))]
+use image::{DynamicImage, ExtendedColorType, ImageError, ImageReader, Limits, codecs::jpeg::JpegEncoder};
+#[cfg(feature = "image")]
+use image::{DynamicImage, ImageBuffer};
 
 /// Why a picture isn't decoded.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,6 +49,7 @@ fn broken(e: impl std::fmt::Display) -> Refusal {
     Refusal::Broken(e.to_string())
 }
 
+#[cfg(feature = "image")]
 fn to_codec_format(format: ImageFormat) -> Option<CodecFormat> {
     match format {
         ImageFormat::Png => Some(CodecFormat::Png),
@@ -56,6 +62,7 @@ fn to_codec_format(format: ImageFormat) -> Option<CodecFormat> {
     }
 }
 
+#[cfg(feature = "image")]
 fn from_codec_format(format: CodecFormat) -> Option<ImageFormat> {
     match format {
         CodecFormat::Png => Some(ImageFormat::Png),
@@ -68,6 +75,7 @@ fn from_codec_format(format: CodecFormat) -> Option<ImageFormat> {
     }
 }
 
+#[cfg(feature = "image")]
 fn codec_limits(max_width: Option<u32>, max_height: Option<u32>, max_bytes: u64) -> CodecLimits {
     let mut limits = CodecLimits::default();
     if let Some(w) = max_width {
@@ -83,6 +91,7 @@ fn codec_limits(max_width: Option<u32>, max_height: Option<u32>, max_bytes: u64)
     limits
 }
 
+#[cfg(feature = "image")]
 fn dynamic_to_codec(img: &DynamicImage) -> Result<CodecImage, String> {
     let (w, h) = (img.width(), img.height());
     match img {
@@ -99,6 +108,7 @@ fn dynamic_to_codec(img: &DynamicImage) -> Result<CodecImage, String> {
     .map_err(|e| e.to_string())
 }
 
+#[cfg(feature = "image")]
 fn codec_to_dynamic(img: CodecImage) -> Result<DynamicImage, Refusal> {
     let (w, h) = (img.width(), img.height());
     let layout = img.layout();
@@ -118,48 +128,99 @@ fn codec_to_dynamic(img: CodecImage) -> Result<DynamicImage, Refusal> {
     ImageBuffer::from_raw(w, h, rgba8).map(DynamicImage::ImageRgba8).ok_or_else(|| Refusal::Broken("decoded image buffer size mismatch".into()))
 }
 
-/// Encode `img` as PNG via `craft-image-codecs`.
+/// Encode `img` as PNG.
 pub fn encode_png(img: &DynamicImage) -> Result<Vec<u8>, String> {
     encode_format(img, ImageFormat::Png)
 }
 
-/// Encode `img` in `format` via `craft-image-codecs`.
+/// Encode `img` in `format`.
 pub fn encode_format(img: &DynamicImage, format: ImageFormat) -> Result<Vec<u8>, String> {
-    let codec_img = dynamic_to_codec(img)?;
-    let codec_fmt = to_codec_format(format).ok_or_else(|| format!("unsupported format: {format:?}"))?;
-    codec_encode(&codec_img, codec_fmt, &EncodeOptions::default()).map_err(|e| e.to_string())
+    #[cfg(feature = "image")]
+    {
+        let codec_img = dynamic_to_codec(img)?;
+        let codec_fmt = to_codec_format(format).ok_or_else(|| format!("unsupported format: {format:?}"))?;
+        codec_encode(&codec_img, codec_fmt, &EncodeOptions::default()).map_err(|e| e.to_string())
+    }
+    #[cfg(all(feature = "slim-image", not(feature = "image")))]
+    {
+        let mut buf = Vec::new();
+        img.write_to(&mut std::io::Cursor::new(&mut buf), format).map_err(|e| e.to_string())?;
+        Ok(buf)
+    }
 }
 
-/// Decode a raster image from memory using `craft-image-codecs` with default limits.
+/// Decode a raster image from memory with default limits.
 pub fn decode_memory(bytes: &[u8]) -> Result<DynamicImage, Refusal> {
-    let codec_fmt = detect(bytes).ok_or(Refusal::NotAPicture)?;
-    let img = decode_as_with(codec_fmt, bytes, &DecodeOptions { limits: CodecLimits::default(), keep_orientation: true }).map_err(broken)?;
-    codec_to_dynamic(img)
+    #[cfg(feature = "image")]
+    {
+        let codec_fmt = detect(bytes).ok_or(Refusal::NotAPicture)?;
+        let img = decode_as_with(codec_fmt, bytes, &DecodeOptions { limits: CodecLimits::default(), keep_orientation: true }).map_err(broken)?;
+        codec_to_dynamic(img)
+    }
+    #[cfg(all(feature = "slim-image", not(feature = "image")))]
+    {
+        let reader = ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().map_err(|_| Refusal::NotAPicture)?;
+        if reader.format().is_none() {
+            return Err(Refusal::NotAPicture);
+        }
+        reader.decode().map_err(broken)
+    }
 }
 
-/// Encode tightly-packed RGB8 pixels as JPEG at `quality` (1..=100) via `craft-image-codecs`.
+/// Encode tightly-packed RGB8 pixels as JPEG at `quality` (1..=100).
 pub fn encode_jpeg(rgb: &[u8], width: u32, height: u32, quality: u8) -> Result<Vec<u8>, String> {
-    let codec_img = CodecImage::from_u8(width, height, ChannelLayout::Rgb, rgb.to_vec()).map_err(|e| e.to_string())?;
-    let opts = EncodeOptions { jpeg_quality: quality.clamp(1, 100), ..EncodeOptions::default() };
-    codec_encode(&codec_img, CodecFormat::Jpeg, &opts).map_err(|e| e.to_string())
+    #[cfg(feature = "image")]
+    {
+        let codec_img = CodecImage::from_u8(width, height, ChannelLayout::Rgb, rgb.to_vec()).map_err(|e| e.to_string())?;
+        let opts = EncodeOptions { jpeg_quality: quality.clamp(1, 100), ..EncodeOptions::default() };
+        codec_encode(&codec_img, CodecFormat::Jpeg, &opts).map_err(|e| e.to_string())
+    }
+    #[cfg(all(feature = "slim-image", not(feature = "image")))]
+    {
+        let mut buf = Vec::new();
+        JpegEncoder::new_with_quality(&mut buf, quality.clamp(1, 100))
+            .encode(rgb, width, height, ExtendedColorType::Rgb8)
+            .map_err(|e| e.to_string())?;
+        Ok(buf)
+    }
 }
 
 /// Read `(width, height)` from a raster image header without decoding pixels.
 pub fn dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
-    let format = detect(bytes)?;
-    match format {
-        CodecFormat::Png => png_probe::pixel_model(bytes).ok().map(|m| (m.width, m.height)),
-        CodecFormat::Jpeg | CodecFormat::Tiff | CodecFormat::Gif | CodecFormat::Bmp => {
-            inspect_raster(bytes).ok().flatten().map(|i| (i.width, i.height))
+    #[cfg(feature = "image")]
+    {
+        let format = detect(bytes)?;
+        match format {
+            CodecFormat::Png => png_probe::pixel_model(bytes).ok().map(|m| (m.width, m.height)),
+            CodecFormat::Jpeg | CodecFormat::Tiff | CodecFormat::Gif | CodecFormat::Bmp => {
+                inspect_raster(bytes).ok().flatten().map(|i| (i.width, i.height))
+            }
+            CodecFormat::WebP => probe_size(bytes).ok(),
+            _ => None,
         }
-        CodecFormat::WebP => probe_size(bytes).ok(),
-        _ => None,
+    }
+    #[cfg(all(feature = "slim-image", not(feature = "image")))]
+    {
+        let reader = ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().ok()?;
+        let format = reader.format()?;
+        if !slim_supported(format) {
+            return None;
+        }
+        reader.into_dimensions().ok()
     }
 }
 
 /// Guess the raster [`ImageFormat`] from magic bytes.
 pub fn guess_format(bytes: &[u8]) -> Option<ImageFormat> {
-    detect(bytes).and_then(from_codec_format)
+    #[cfg(feature = "image")]
+    {
+        detect(bytes).and_then(from_codec_format)
+    }
+    #[cfg(all(feature = "slim-image", not(feature = "image")))]
+    {
+        let format = ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().ok()?.format()?;
+        slim_supported(format).then_some(format)
+    }
 }
 
 /// Whether a raster picture's header indicates an alpha channel.
@@ -182,17 +243,60 @@ pub struct Probe<'a> {
 /// TIFF compressions decoded within the caller's limits: none, CCITT Group 4, LZW, Deflate (both
 /// codes) and `PackBits`. The `tiff` crate decodes a JPEG strip (7) with a decoder of its own and
 /// default limits, whatever size the TIFF declares, so such a TIFF is not decoded (#3645).
+#[cfg(feature = "image")]
 const TIFF_COMPRESSIONS: [u16; 6] = [1, 4, 5, 8, 32946, 32773];
 
-/// Read a picture's header: PNG, JPEG, GIF, WebP, BMP or TIFF.
-///
-/// # Errors
-///
-/// Returns `Refusal::NotAPicture` for an unsupported format, `Refusal::Unsupported` for a TIFF
-/// whose compression cannot be read or budgeted (including truncation that prevents reading
-/// its compression metadata), `Refusal::TooLarge`
-/// on size arithmetic overflow, and `Refusal::Broken` for other header or inspection errors,
-/// including TIFF errors after compression metadata is accepted.
+#[cfg(all(feature = "slim-image", not(feature = "image")))]
+fn slim_supported(format: ImageFormat) -> bool {
+    matches!(format, ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::Gif | ImageFormat::WebP | ImageFormat::Bmp)
+}
+
+#[cfg(all(feature = "slim-image", not(feature = "image")))]
+fn slim_has_alpha(format: ImageFormat, bytes: &[u8]) -> bool {
+    match format {
+        ImageFormat::Png => bytes.get(25).is_some_and(|&ct| ct == 4 || ct == 6) || bytes.windows(4).any(|w| w == b"tRNS"),
+        ImageFormat::Gif | ImageFormat::WebP => true,
+        _ => false,
+    }
+}
+
+#[cfg(all(feature = "slim-image", not(feature = "image")))]
+fn slim_probe_inner(bytes: &[u8]) -> Result<(ImageFormat, u32, u32, u64, bool), Refusal> {
+    let reader = ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().map_err(|_| Refusal::NotAPicture)?;
+    let format = reader.format().ok_or(Refusal::NotAPicture)?;
+    if !slim_supported(format) {
+        return Err(Refusal::NotAPicture);
+    }
+    let (width, height) = reader.into_dimensions().map_err(broken)?;
+    let (width, height, peak) = sized(width, height, 4, 0)?;
+    let alpha = slim_has_alpha(format, bytes);
+    Ok((format, width, height, peak, alpha))
+}
+
+#[cfg(all(feature = "slim-image", not(feature = "image")))]
+fn slim_decode_limited(
+    bytes: &[u8],
+    format: ImageFormat,
+    width: u32,
+    height: u32,
+    max_w: u32,
+    max_h: u32,
+    budget: u64,
+) -> Result<DynamicImage, Refusal> {
+    let mut reader = ImageReader::new(std::io::Cursor::new(bytes));
+    reader.set_format(format);
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(max_w);
+    limits.max_image_height = Some(max_h);
+    limits.max_alloc = Some(budget);
+    reader.limits(limits);
+    reader.decode().map_err(|e| match e {
+        ImageError::Limits(_) => Refusal::TooLarge { width, height },
+        other => broken(other),
+    })
+}
+
+#[cfg(feature = "image")]
 pub fn probe(bytes: &[u8]) -> Result<Probe<'_>, Refusal> {
     let codec_fmt = detect(bytes).ok_or(Refusal::NotAPicture)?;
     let format = from_codec_format(codec_fmt).ok_or(Refusal::NotAPicture)?;
@@ -229,6 +333,13 @@ pub fn probe(bytes: &[u8]) -> Result<Probe<'_>, Refusal> {
     Ok(Probe { bytes: Cow::Borrowed(bytes), format, width, height, peak, alpha })
 }
 
+#[cfg(all(feature = "slim-image", not(feature = "image")))]
+pub fn probe(bytes: &[u8]) -> Result<Probe<'_>, Refusal> {
+    let (format, width, height, peak, alpha) = slim_probe_inner(bytes)?;
+    Ok(Probe { bytes: Cow::Borrowed(bytes), format, width, height, peak, alpha })
+}
+
+#[cfg(feature = "image")]
 /// [`bmp_probe::dib_to_bmp`], its failure (the BMP's bytes can't be allocated) as the refusal a
 /// picture too large to hold gets, with the size its header declares (0 × 0 when it can't be read).
 fn dib_to_bmp(dib: &[u8]) -> Result<Vec<u8>, Refusal> {
@@ -246,6 +357,7 @@ fn dib_to_bmp(dib: &[u8]) -> Result<Vec<u8>, Refusal> {
 ///
 /// Returns `Refusal::Broken` for an invalid DIB header and `Refusal::TooLarge` on size arithmetic
 /// overflow.
+#[cfg(feature = "image")]
 pub fn probe_dib(dib: Vec<u8>) -> Result<Probe<'static>, Refusal> {
     let dib = bmp_probe::dib_layout(dib);
     let bmp = dib_to_bmp(&dib)?;
@@ -266,6 +378,27 @@ pub fn probe_dib(dib: Vec<u8>) -> Result<Probe<'static>, Refusal> {
     Ok(Probe { bytes: Cow::Owned(bmp), format: ImageFormat::Bmp, width, height, peak, alpha })
 }
 
+#[cfg(all(feature = "slim-image", not(feature = "image")))]
+pub fn probe_dib(dib: Vec<u8>) -> Result<Probe<'static>, Refusal> {
+    let Some(hdr_size) = dib.get(0..4).and_then(|s| s.try_into().ok()).map(u32::from_le_bytes) else {
+        return Err(Refusal::Broken("its DIB header can't be read".into()));
+    };
+    if hdr_size != 12 && hdr_size < 40 {
+        return Err(Refusal::Broken("its DIB header can't be read".into()));
+    }
+    let total = u32::try_from(14usize.saturating_add(dib.len())).map_err(|_| Refusal::TooLarge { width: 0, height: 0 })?;
+    let offset = 14u32.saturating_add(hdr_size).min(total);
+    let mut bmp = Vec::with_capacity(14 + dib.len());
+    bmp.extend_from_slice(b"BM");
+    bmp.extend_from_slice(&total.to_le_bytes());
+    bmp.extend_from_slice(&[0; 4]);
+    bmp.extend_from_slice(&offset.to_le_bytes());
+    bmp.extend_from_slice(&dib);
+    let (format, width, height, peak, alpha) = slim_probe_inner(&bmp)?;
+    Ok(Probe { bytes: Cow::Owned(bmp), format, width, height, peak, alpha })
+}
+
+#[cfg(feature = "image")]
 /// A DIB's width and height, read by the shared BMP probe. Header sizes other than 12 (core) and
 /// 40 or more (info) are refused here: the probe would read them as info headers.
 fn dib_header_dims(dib: &[u8]) -> Option<(u32, u32)> {
@@ -315,13 +448,20 @@ impl Probe<'_> {
         if !self.fits(budget) {
             return Err(Refusal::TooLarge { width: self.width, height: self.height });
         }
-        let codec_fmt = to_codec_format(self.format).ok_or(Refusal::NotAPicture)?;
-        let opts = DecodeOptions { limits: codec_limits(Some(self.width), Some(self.height), budget), keep_orientation: true };
-        let img = decode_as_with(codec_fmt, &self.bytes, &opts).map_err(|e| match e {
-            CodecError::LimitExceeded(_) => Refusal::TooLarge { width: self.width, height: self.height },
-            other => broken(other),
-        })?;
-        codec_to_dynamic(img)
+        #[cfg(feature = "image")]
+        {
+            let codec_fmt = to_codec_format(self.format).ok_or(Refusal::NotAPicture)?;
+            let opts = DecodeOptions { limits: codec_limits(Some(self.width), Some(self.height), budget), keep_orientation: true };
+            let img = decode_as_with(codec_fmt, &self.bytes, &opts).map_err(|e| match e {
+                CodecError::LimitExceeded(_) => Refusal::TooLarge { width: self.width, height: self.height },
+                other => broken(other),
+            })?;
+            codec_to_dynamic(img)
+        }
+        #[cfg(all(feature = "slim-image", not(feature = "image")))]
+        {
+            slim_decode_limited(&self.bytes, self.format, self.width, self.height, self.width, self.height, budget)
+        }
     }
 }
 
@@ -374,17 +514,29 @@ pub fn decode_for_drawing(bytes: &[u8], budget: u64, max_side: u32) -> Result<Dy
     if !p.fits(budget) {
         return Err(Refusal::TooLarge { width: p.width, height: p.height });
     }
-    let codec_fmt = to_codec_format(p.format).ok_or(Refusal::NotAPicture)?;
-    let opts = DecodeOptions { limits: codec_limits(Some(max_side), Some(max_side), budget), keep_orientation: true };
-    let img = decode_as_with(codec_fmt, bytes, &opts).map_err(|e| match e {
-        CodecError::LimitExceeded(_) => Refusal::TooLarge { width: p.width, height: p.height },
-        other => broken(other),
-    })?;
-    let (w, h) = (img.width(), img.height());
-    if w == 0 || h == 0 || w > max_side || h > max_side {
-        return Err(Refusal::Broken("it has no pixels or a side past the limit".into()));
+    #[cfg(feature = "image")]
+    {
+        let codec_fmt = to_codec_format(p.format).ok_or(Refusal::NotAPicture)?;
+        let opts = DecodeOptions { limits: codec_limits(Some(max_side), Some(max_side), budget), keep_orientation: true };
+        let img = decode_as_with(codec_fmt, bytes, &opts).map_err(|e| match e {
+            CodecError::LimitExceeded(_) => Refusal::TooLarge { width: p.width, height: p.height },
+            other => broken(other),
+        })?;
+        let (w, h) = (img.width(), img.height());
+        if w == 0 || h == 0 || w > max_side || h > max_side {
+            return Err(Refusal::Broken("it has no pixels or a side past the limit".into()));
+        }
+        codec_to_dynamic(img)
     }
-    codec_to_dynamic(img)
+    #[cfg(all(feature = "slim-image", not(feature = "image")))]
+    {
+        let img = slim_decode_limited(bytes, p.format, p.width, p.height, max_side, max_side, budget)?;
+        let (w, h) = (img.width(), img.height());
+        if w == 0 || h == 0 || w > max_side || h > max_side {
+            return Err(Refusal::Broken("it has no pixels or a side past the limit".into()));
+        }
+        Ok(img)
+    }
 }
 
 /// Largest page-background picture the page raster draws, in pixels (hostile files).
@@ -423,10 +575,12 @@ fn peak_bytes(width: u32, height: u32, native: u64, held: u64) -> Option<u64> {
 /// The compression of a classic TIFF's first image (the one the image crate decodes): 1 when the
 /// tag is missing. None when the header can't be read, or when the tag appears more than once:
 /// the decoder keeps the last copy, so a harmless first one must not hide a JPEG one after it.
+#[cfg(feature = "image")]
 fn tiff_compression(bytes: &[u8]) -> Option<u16> {
     craft_tiff::probe::first_image_compression(bytes)
 }
 
+#[cfg(feature = "image")]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1353,5 +1507,27 @@ mod tests {
         for junk in [&b"not a webp at all"[..], b"", b"RIFF", b"RIFF\0\0\0\0WEBPVP8L"] {
             assert!(!webp_probe::has_alpha(junk).unwrap_or(false));
         }
+    }
+}
+
+#[cfg(all(feature = "slim-image", not(feature = "image")))]
+#[cfg(test)]
+mod slim_tests {
+    use super::*;
+
+    #[test]
+    fn slim_encode_probe_and_decode_roundtrip() {
+        let img = image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(4, 3, image::Rgba([10, 20, 30, 128])));
+        let png = encode_png(&img).unwrap();
+        let p = probe(&png).unwrap();
+        assert_eq!((p.width, p.height, p.format), (4, 3, ImageFormat::Png));
+        assert!(p.has_alpha());
+        assert_eq!(dimensions(&png), Some((4, 3)));
+        assert_eq!(guess_format(&png), Some(ImageFormat::Png));
+        assert_eq!(check_for_drawing(&png, 100), Ok(()));
+        assert_eq!(check_for_drawing(&png, 2), Err(DrawFailure::Undecodable));
+        let jpeg = encode_jpeg(&[255, 0, 0, 0, 255, 0], 2, 1, 80).unwrap();
+        assert_eq!(dimensions(&jpeg), Some((2, 1)));
+        assert_eq!(guess_format(b"not an image"), None);
     }
 }

@@ -23,6 +23,7 @@ pub(crate) fn text_box_host(app: &WordApp, layout: &DocLayout) -> Option<StoryRe
 /// Whether a press in a page's header/footer area (`zone`, from `header_footer_zone`) goes into
 /// another header/footer than `story`: from the body, the other one of the two (#1026), or with
 /// Different First Page on, page 1's header while editing page 2's (#2826).
+#[cfg(feature = "full")]
 pub(super) fn enters_header_footer(app: &WordApp, story: StoryRef, zone: Option<(Option<StoryRef>, bool)>) -> bool {
     zone.is_some_and(|(shown, header)| match part_kind(app, story) {
         _ if story == StoryRef::Body => true,

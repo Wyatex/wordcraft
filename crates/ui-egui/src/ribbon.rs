@@ -113,7 +113,10 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) -> RibbonOutput<String> {
     // contextual ones (the Outlining tab right after File). A contextual tab (Table, Picture
     // Format) may be stored while the selection moved away, and a tab may have been hidden.
     let user_tabs = app.session.ribbon.tabs().into_owned();
-    let mut names: Vec<(String, bool)> = vec![("File".to_string(), false)];
+    let mut names: Vec<(String, bool)> = Vec::new();
+    if app.show_file_tab {
+        names.push(("File".to_string(), false));
+    }
     names.extend(user_tabs.iter().filter(|e| !e.hidden).map(|e| (e.name.clone(), e.custom)));
     for ct in contextual_tabs(&app.session) {
         if ct == "Outlining" {
@@ -162,13 +165,14 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) -> RibbonOutput<String> {
         )
         .variant(Variant::PRIMARY),
     ];
+    let trailing: &[StripEnd<'_>] = if app.show_document_actions { &ends } else { &[] };
     // The context menu's body captures these, never `app`, which the row body borrows.
     let qat: Vec<String> = app.session.ribbon.qat().into_iter().map(str::to_string).collect();
     let qat_shown = app.ui.quick_access_toolbar;
     // The collapse state is written through `ui.collapseRibbon`, the one write path, when the strip toggles it.
     let mut collapsed = app.ui.ribbon_collapsed;
     let out = Ribbon::new(tl!("Ribbon").to_string(), &tabs, Bind::given(app.ui.tab.clone()))
-        .trailing(&ends)
+        .trailing(trailing)
         .minimised(Bind::bound(&mut collapsed))
         .context_menu(&mut |ui, request, _| context_menu::rows(ui, request, &qat, qat_shown))
         // The old ribbon drew its large icons 32 points square and every other icon 17, and its

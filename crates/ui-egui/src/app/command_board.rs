@@ -1,7 +1,9 @@
 //! The app's side of the framework command runtime: the catalog of commands and their default
 //! chords, the per-frame state (enabled, checked, hint) and the running of what the runtime fired.
 
-use std::collections::{HashMap, HashSet};
+#[cfg(feature = "full")]
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use craft::keymap::Overrides;
@@ -10,7 +12,9 @@ use craft::ui::runtime::commands::{
 };
 use craft::ui::runtime::frame::FrameOutput;
 
-use super::{Value, WordApp, json};
+#[cfg(feature = "full")]
+use super::Value;
+use super::{WordApp, json};
 
 /// Whether command `id` can run now, and the engine's reason when it can't.
 ///
@@ -26,8 +30,11 @@ fn gate(app: &WordApp, id: &str) -> (bool, Option<&'static str>) {
             let reason = app.session.why_disabled(id);
             (reason.is_none(), reason)
         }
+        #[cfg(feature = "full")]
         None if id.starts_with("ui.zotero.") => (app.zotero.busy.is_none() && !cfg!(target_arch = "wasm32"), None),
+        #[cfg(feature = "full")]
         None if id == "ui.linkTextBox" => (command_enabled(app, "shape.link"), None),
+        #[cfg(feature = "full")]
         None if id == "ui.crop" => (crate::crop::can_toggle(app), None),
         None => (id.starts_with("ui."), None),
     }
@@ -40,6 +47,7 @@ pub(crate) fn command_enabled(app: &WordApp, id: &str) -> bool {
 
 /// The interface commands whose enabled state depends on app state (`gate`): each has a catalog
 /// entry without a chord and a command state, so bound controls resolve them like any command.
+#[cfg(feature = "full")]
 const GATED_UI_COMMANDS: &[(&str, &str)] = &[
     ("ui.crop", "Crop"),
     ("ui.linkTextBox", "Link Text Box"),
@@ -51,10 +59,13 @@ const GATED_UI_COMMANDS: &[(&str, &str)] = &[
     ("ui.zotero.setDocPrefs", "Document Preferences"),
     ("ui.zotero.removeCodes", "Unlink Citations"),
 ];
+#[cfg(not(feature = "full"))]
+const GATED_UI_COMMANDS: &[(&str, &str)] = &[];
 
 /// Word feature catalog entries whose command is not yet registered in `registry`: each gets a
 /// catalog entry without a chord (preventing unregistered-command warnings) and a disabled state
 /// until an engine command takes its id.
+#[cfg(feature = "full")]
 fn unimplemented_catalog_commands(registry: &wordcraft_engine::Registry) -> impl Iterator<Item = (&'static str, &'static str)> + '_ {
     let mut seen = HashSet::new();
     wordcraft_engine::catalog::CATALOG.lines().filter_map(move |line| {
@@ -65,6 +76,11 @@ fn unimplemented_catalog_commands(registry: &wordcraft_engine::Registry) -> impl
         let id = parts.next()?;
         (registry.get(id).is_none() && seen.insert(id)).then_some((id, feature))
     })
+}
+
+#[cfg(not(feature = "full"))]
+fn unimplemented_catalog_commands(_registry: &wordcraft_engine::Registry) -> impl Iterator<Item = (&'static str, &'static str)> + '_ {
+    std::iter::empty()
 }
 
 /// The default chords of an engine command: its `shortcut`, one binding per `" / "` piece.
@@ -104,6 +120,7 @@ pub(crate) struct CommandStatesCache {
     /// Translated fallback hint shared by all unimplemented catalog commands.
     unavailable_hint: Option<Arc<str>>,
     /// Cached translated hints by `(spec index, disabled reason)` for the current language.
+    #[cfg(feature = "full")]
     hints: HashMap<(usize, Option<&'static str>), Option<Arc<str>>>,
 }
 
@@ -117,16 +134,35 @@ impl CommandStatesCache {
             .collect();
         let unimplemented = unimplemented_catalog_commands(&registry).map(|(id, _)| (id, CommandRef::new(id), None)).collect();
         let commands_dialog = (CommandRef::with_params("ui.dialog", json!({"name": "commands"})), None);
+        #[cfg(feature = "full")]
         let unavailable_hint = crate::widgets::command_hint("", "", Some("")).map(Arc::from);
-        CommandStatesCache { registry, lang, registered, ui_commands, unimplemented, commands_dialog, unavailable_hint, hints: HashMap::new() }
+        #[cfg(not(feature = "full"))]
+        let unavailable_hint = None;
+        CommandStatesCache {
+            registry,
+            lang,
+            registered,
+            ui_commands,
+            unimplemented,
+            commands_dialog,
+            unavailable_hint,
+            #[cfg(feature = "full")]
+            hints: HashMap::new(),
+        }
     }
 
     fn matches(&self, registry: &Arc<wordcraft_engine::Registry>, lang: &'static str) -> bool {
         self.lang == lang && Arc::ptr_eq(&self.registry, registry)
     }
 
+    #[cfg(feature = "full")]
     fn hint_for(&mut self, idx: usize, location: &str, label: &str, reason: Option<&'static str>) -> Option<Arc<str>> {
         self.hints.entry((idx, reason)).or_insert_with(|| crate::widgets::command_hint(location, label, reason).map(Arc::from)).clone()
+    }
+
+    #[cfg(not(feature = "full"))]
+    fn hint_for(&mut self, _idx: usize, _location: &str, _label: &str, _reason: Option<&'static str>) -> Option<Arc<str>> {
+        None
     }
 }
 
@@ -344,6 +380,7 @@ impl WordApp {
     /// except the interface commands, which have their own target.
     pub(crate) fn run_fired(&mut self, ctx: &egui::Context, output: &FrameOutput) {
         for fired in &output.fired {
+            #[cfg(feature = "full")]
             if let Some(window) = self.windows.active() {
                 self.enter_window(window);
             }
@@ -351,15 +388,18 @@ impl WordApp {
             let params = if fired.command.params.is_null() { json!({}) } else { fired.command.params.clone() };
             let from_key = fired.source == FireSource::Key;
 
+            #[cfg(feature = "full")]
             let (id, params) = if id == "edit.pasteFormat" && from_key { self.paste_format_command(ctx, params) } else { (id, params) };
             // An Undo or Redo that is not a focused field's own edit (S-L187 sends that one to the
             // field) first takes back the gesture under way and every running one (S-L364).
+            #[cfg(feature = "full")]
             if matches!(id, "edit.undo" | "edit.redo") {
                 let mut host = std::mem::take(&mut self.edits);
                 host.before_undo(ctx, self);
                 self.edits = host;
             }
             let result = if fired.source == FireSource::Automation { self.execute(id, params) } else { self.run(id, params) };
+            #[cfg(feature = "full")]
             if from_key && result.is_ok() {
                 crate::announce::after_shortcut(self, id, ctx);
             }
@@ -376,6 +416,7 @@ impl WordApp {
     /// Painter) picked up; with none picked up it pastes the clipboard as text only, as Word for
     /// Windows does (#1537, #4943). Another key bound to Paste Formatting only pastes formatting.
     /// The framework fires one command per chord, so nothing waits for a browser paste event.
+    #[cfg(feature = "full")]
     fn paste_format_command(&self, ctx: &egui::Context, params: Value) -> (&'static str, Value) {
         let formatting = self.session.painter.is_some() || self.session.copied_format.is_some();
         // The command runs a pass after its press, when a quick tap's modifiers are already up: with none held the fire

@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use craft::keymap::CommandRef;
 use craft::ui::contract::overlay::Anchor;
 use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _, Trigger};
+#[cfg(feature = "full")]
 use craft::ui::display::Divider;
 use craft::ui::menu::{Menu, MenuItem};
 use egui::{Pos2, Response, Ui, vec2};
@@ -22,15 +23,20 @@ pub(crate) enum ContextAsk {
 
 /// The spelling suggestions and synonyms the context menu offers for the selection or the word
 /// at the caret.
+#[cfg(feature = "full")]
 pub(super) fn context_suggestions(app: &mut WordApp) {
     app.canvas.context_issue = app.session.run("review.suggestions", &json!({})).ok().filter(|v| !v.is_null());
     app.canvas.context_synonyms = app.session.run("review.thesaurus", &json!({})).ok().and_then(|v| v.get("synonyms").cloned());
 }
 
+#[cfg(not(feature = "full"))]
+pub(super) fn context_suggestions(_app: &mut WordApp) {}
+
 /// The heading of a proofing issue's context menu, in the interface language like the rest of
 /// the menu: a spelling issue's own message is in the text's language (craft-proof's, "Faute
 /// d'orthographe possible" for French text), so it says Possible spelling mistake instead.
 /// English grammar rules' messages are catalog keys; other languages' rules explain in their own.
+#[cfg(feature = "full")]
 pub(crate) fn issue_heading(issue: &serde_json::Value) -> String {
     if issue.get("kind").and_then(|k| k.as_str()) == Some("spelling") {
         return tl!("Possible spelling mistake").to_string();
@@ -46,7 +52,9 @@ pub(crate) fn show(app: &mut WordApp, ui: &mut Ui, opener: &Response, ask: Optio
     let mut open = app.canvas.context_menu_open;
     match ask {
         Some(ContextAsk::AtCaret) => {
-            context_suggestions(app);
+            if !app.session.read_only() {
+                context_suggestions(app);
+            }
             if let Some((p, h)) = super::cursor::caret_screen(app) {
                 app.canvas.context_menu_at = Some(p + vec2(0.0, h));
             }
@@ -54,8 +62,8 @@ pub(crate) fn show(app: &mut WordApp, ui: &mut Ui, opener: &Response, ask: Optio
         }
         Some(ContextAsk::AtPointer(p)) => {
             app.canvas.context_menu_at = Some(p);
-            // The equation strip's menu is the equation's own: it has no proofing rows.
-            if app.session.math.is_none() {
+            #[cfg(feature = "full")]
+            if !app.session.read_only() && app.session.math.is_none() {
                 if wordcraft_engine::cmd::objects::selected(&app.session).is_some() {
                     app.canvas.context_issue = None;
                     app.canvas.context_synonyms = None;
@@ -75,6 +83,7 @@ pub(crate) fn show(app: &mut WordApp, ui: &mut Ui, opener: &Response, ask: Optio
     let at = app.canvas.context_menu_at.unwrap_or(opener.rect.left_top());
     let menu = Menu::new(tl!("Context Menu").to_string()).opened_by(opener, Trigger::Manual).anchor(Anchor::Point(at)).open(Bind::bound(&mut open));
 
+    #[cfg(feature = "full")]
     if app.session.math.is_some() {
         let rows = super::equation_frame::equation_menu_rows(app);
         let pick = menu.pick(ui, &rows);
@@ -82,6 +91,13 @@ pub(crate) fn show(app: &mut WordApp, ui: &mut Ui, opener: &Response, ask: Optio
             super::equation_frame::run_equation_act(app, &act);
             app.canvas.focus_page(ui.ctx());
         }
+    } else if app.session.read_only() {
+        let cell = RefCell::new(&mut *app);
+        let _ = menu.show(ui, |ui, _cx| {
+            if let Ok(mut app) = cell.try_borrow_mut() {
+                read_only_rows(&mut app, ui);
+            }
+        });
     } else {
         // The companion bar and the rows both need the app; they run one after the other, never nested.
         let bar_visible = crate::mini_toolbar::context_menu_visible(app);
@@ -98,6 +114,15 @@ pub(crate) fn show(app: &mut WordApp, ui: &mut Ui, opener: &Response, ask: Optio
             }
         });
     }
+    #[cfg(not(feature = "full"))]
+    {
+        let cell = RefCell::new(&mut *app);
+        let _ = menu.show(ui, |ui, _cx| {
+            if let Ok(mut app) = cell.try_borrow_mut() {
+                read_only_rows(&mut app, ui);
+            }
+        });
+    }
     app.canvas.context_menu_open = open;
     if !open {
         app.canvas.context_menu_at = None;
@@ -110,11 +135,20 @@ fn item(ui: &mut Ui, label: &str, id: &str, params: Value) {
     let _ = MenuItem::new(tl!(label).to_string()).command(CommandRef::with_params(id, params)).show(ui);
 }
 
+#[cfg(feature = "full")]
 fn rule(ui: &mut Ui) {
     let _ = Divider::horizontal().show(ui);
 }
 
+fn read_only_rows(app: &mut WordApp, ui: &mut Ui) {
+    if !app.session.sel.is_collapsed() {
+        item(ui, "Copy", "edit.copy", json!({}));
+    }
+    item(ui, "Select All", "select.all", json!({}));
+}
+
 /// The text menu's rows.
+#[cfg(feature = "full")]
 fn rows(app: &mut WordApp, ui: &mut Ui) {
     if let Some(issue) = app.canvas.context_issue.clone() {
         let sugg: Vec<String> = issue
@@ -245,6 +279,7 @@ fn rows(app: &mut WordApp, ui: &mut Ui) {
 }
 
 /// What of a table the selection is: Word's context menu offers different table items for each.
+#[cfg(feature = "full")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TablePick {
     /// The caret or text in one cell, or that one cell.
@@ -256,6 +291,7 @@ enum TablePick {
     Table,
 }
 
+#[cfg(feature = "full")]
 fn table_pick(s: &wordcraft_engine::Session) -> TablePick {
     if let Some(r) = s.cell_range()
         && let Some(t) = s.doc.table(r.story, &r.table)

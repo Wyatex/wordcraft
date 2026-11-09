@@ -9,28 +9,35 @@ description = "WordCraft import/export: plain text, Markdown, HTML, RTF, OpenDoc
 workspace = true
 
 [features]
+default = ["write", "odt", "latex", "math", "sheet", "full-codecs"]
+write = []
+odt = ["dep:craft-odf"]
+latex = ["dep:craft-latex", "math"]
+math = ["dep:craft-math", "wordcraft-doc/math"]
+sheet = ["dep:craft-sheet", "dep:craft-ods", "dep:craft-xls", "dep:craft-xlsx"]
+full-codecs = ["wordcraft-geom/image"]
 # `sheet::xls_fixture`, the binary workbook builder other crates' tests share; turned on only as a
 # dev-dependency, so never built into the app.
 test-support = ["craft-xls/test-support"]
 
 [dependencies]
-wordcraft-doc = { workspace = true }
-wordcraft-docx = { workspace = true }
+wordcraft-doc = { path = "../doc", default-features = false }
+wordcraft-docx = { path = "../docx", default-features = false }
 craft-wordmodel = { workspace = true }
 craft-rtf = { workspace = true }
 craft-flow = { workspace = true }
-craft-odf = { workspace = true }
+craft-odf = { workspace = true, optional = true }
 craft-markdown = { workspace = true }
 craft-html = { workspace = true }
-craft-latex = { workspace = true }
-craft-math = { workspace = true }
+craft-latex = { workspace = true, optional = true }
+craft-math = { workspace = true, optional = true }
 craft-mime = { workspace = true }
-craft-sheet = { workspace = true }
-craft-ods = { workspace = true }
-craft-xls = { workspace = true }
-craft-xlsx = { workspace = true }
+craft-sheet = { workspace = true, optional = true }
+craft-ods = { workspace = true, optional = true }
+craft-xls = { workspace = true, optional = true }
+craft-xlsx = { workspace = true, optional = true }
 craft-zip = { workspace = true }
-wordcraft-geom = { workspace = true, features = ["image"] }
+wordcraft-geom = { path = "../geom", features = ["slim-image"] }
 craft-metafile = { workspace = true }
 encoding_rs = { workspace = true }
 log = { workspace = true }

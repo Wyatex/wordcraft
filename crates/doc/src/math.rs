@@ -945,69 +945,76 @@ mod tests {
         std::thread::Builder::new().stack_size(512 * 1024).spawn(f).unwrap().join().unwrap();
     }
 
-    #[test]
-    fn deeply_chained_input_stays_shallow() {
-        on_small_stack(|| {
-            let cases: Vec<(&str, Arg)> = vec![
-                ("x^1^1…", parse_linear(&format!("x{}", "^1".repeat(9999)))),
-                ("a/a/a…", parse_linear(&format!("a{}", "/a".repeat(9999)))),
-                ("accents", parse_linear(&format!("x{}", "\u{302}".repeat(9999)))),
-                ("limits", parse_linear(&format!("x{}", "┬a".repeat(9000)))),
-                ("(a b)^1^1…", parse_linear(&format!("(a b){}", "^1".repeat(9000)))),
-                ("latex x^1^1…", crate::math_latex::parse_latex(&format!("x{}", "^1".repeat(9999)))),
-                ("latex \\sum…", crate::math_latex::parse_latex(&"\\sum".repeat(5000))),
-                ("latex \\sin x^1…", crate::math_latex::parse_latex(&format!("\\sin x{}", "^1".repeat(9000)))),
-            ];
-            for (name, n) in cases {
-                assert!(!n.is_empty(), "{name}");
-                assert!(depth_of(&n) <= 70, "{name}: depth {}", depth_of(&n));
-                let copy = n.clone();
-                assert_eq!(copy, n, "{name}");
-                let _ = to_linear(&n);
-                let _ = crate::math_latex::to_latex(&n);
-                let json = serde_json::to_string(&n).unwrap();
-                let back: Arg = serde_json::from_str(&json).unwrap();
-                assert_eq!(back, n, "{name}");
+    #[cfg(feature = "math")]
+    #[cfg(test)]
+    mod math_latex_tests {
+        use super::*;
+
+        #[test]
+        fn deeply_chained_input_stays_shallow() {
+            on_small_stack(|| {
+                let cases: Vec<(&str, Arg)> = vec![
+                    ("x^1^1…", parse_linear(&format!("x{}", "^1".repeat(9999)))),
+                    ("a/a/a…", parse_linear(&format!("a{}", "/a".repeat(9999)))),
+                    ("accents", parse_linear(&format!("x{}", "\u{302}".repeat(9999)))),
+                    ("limits", parse_linear(&format!("x{}", "┬a".repeat(9000)))),
+                    ("(a b)^1^1…", parse_linear(&format!("(a b){}", "^1".repeat(9000)))),
+                    ("latex x^1^1…", crate::math_latex::parse_latex(&format!("x{}", "^1".repeat(9999)))),
+                    ("latex \\sum…", crate::math_latex::parse_latex(&"\\sum".repeat(5000))),
+                    ("latex \\sin x^1…", crate::math_latex::parse_latex(&format!("\\sin x{}", "^1".repeat(9000)))),
+                ];
+                for (name, n) in cases {
+                    assert!(!n.is_empty(), "{name}");
+                    assert!(depth_of(&n) <= 70, "{name}: depth {}", depth_of(&n));
+                    let copy = n.clone();
+                    assert_eq!(copy, n, "{name}");
+                    let _ = to_linear(&n);
+                    let _ = crate::math_latex::to_latex(&n);
+                    let json = serde_json::to_string(&n).unwrap();
+                    let back: Arg = serde_json::from_str(&json).unwrap();
+                    assert_eq!(back, n, "{name}");
+                }
+            });
+        }
+
+        #[test]
+        fn ordinary_nesting_is_still_built() {
+            // Well below the cap: scripts, fractions and operators still wrap.
+            let n = parse_linear(&format!("x{}", "^1".repeat(10)));
+            assert_eq!(depth_of(&n), 11, "{n:#?}");
+            let n = crate::math_latex::parse_latex(r"\sum_{i}\sum_{j}a_{ij}");
+            assert!(matches!(&n[0], MNode::Nary { e, .. } if matches!(e.first(), Some(MNode::Nary { .. }))), "{n:#?}");
+        }
+
+        //T2
+        #[test]
+        fn latex_text_escapes_what_latex_reads_as_markup() {
+            for text in ["a}b\\c", "{x}", "50% of #1", "a_b&c$d~e^f", "\\", "\\alpha", "\\{"] {
+                let n = vec![MNode::Run(MRun { text: text.into(), nor: true, sty: Some(MSty::Plain), ..Default::default() })];
+                let tex = crate::math_latex::to_latex(&n);
+                assert_eq!(crate::math_latex::parse_latex(&tex), n, "{text:?} → {tex}");
             }
-        });
-    }
-
-    #[test]
-    fn ordinary_nesting_is_still_built() {
-        // Well below the cap: scripts, fractions and operators still wrap.
-        let n = parse_linear(&format!("x{}", "^1".repeat(10)));
-        assert_eq!(depth_of(&n), 11, "{n:#?}");
-        let n = crate::math_latex::parse_latex(r"\sum_{i}\sum_{j}a_{ij}");
-        assert!(matches!(&n[0], MNode::Nary { e, .. } if matches!(e.first(), Some(MNode::Nary { .. }))), "{n:#?}");
-    }
-
-    //T2
-    #[test]
-    fn latex_text_escapes_what_latex_reads_as_markup() {
-        for text in ["a}b\\c", "{x}", "50% of #1", "a_b&c$d~e^f", "\\", "\\alpha", "\\{"] {
-            let n = vec![MNode::Run(MRun { text: text.into(), nor: true, sty: Some(MSty::Plain), ..Default::default() })];
-            let tex = crate::math_latex::to_latex(&n);
-            assert_eq!(crate::math_latex::parse_latex(&tex), n, "{text:?} → {tex}");
+            let n = vec![MNode::Run(MRun::new("a\\b"))];
+            assert_eq!(crate::math_latex::parse_latex(&crate::math_latex::to_latex(&n)), n);
         }
-        let n = vec![MNode::Run(MRun::new("a\\b"))];
-        assert_eq!(crate::math_latex::parse_latex(&crate::math_latex::to_latex(&n)), n);
-    }
 
-    //T3
-    #[test]
-    fn latex_runs_merge_inside_every_structure() {
-        use crate::math_latex::parse_latex;
-        for (tex, lin) in [(r"\overline{ab}", "¯(ab)"), (r"\underline{ab}", "▁(ab)"), (r"\boxed{ab}", "▭(ab)"), (r"\phantom{ab}", "⟡(ab)")] {
-            assert_eq!(parse_latex(tex), parse_linear(lin), "{tex}");
+        //T3
+        #[test]
+        fn latex_runs_merge_inside_every_structure() {
+            use crate::math_latex::parse_latex;
+            for (tex, lin) in [(r"\overline{ab}", "¯(ab)"), (r"\underline{ab}", "▁(ab)"), (r"\boxed{ab}", "▭(ab)"), (r"\phantom{ab}", "⟡(ab)")]
+            {
+                assert_eq!(parse_latex(tex), parse_linear(lin), "{tex}");
+            }
+            let n = parse_latex(r"\begin{matrix}a b&c d\\e f&g\end{matrix}");
+            let MNode::Matrix { rows, .. } = &n[0] else { panic!("{n:#?}") };
+            assert!(rows.iter().flatten().all(|c| c.len() == 1), "{rows:#?}");
+            let n = parse_latex(r"\hat{ab}\underbrace{ab}\underset{ab}{cd}");
+            let runs = |a: &Arg| a.iter().filter(|n| matches!(n, MNode::Run(_))).count();
+            assert!(matches!(&n[0], MNode::Acc { e, .. } if runs(e) == 1), "{n:#?}");
+            assert!(matches!(&n[1], MNode::GroupChr { e, .. } if runs(e) == 1), "{n:#?}");
+            assert!(matches!(&n[2], MNode::Lim { e, lim, .. } if runs(e) == 1 && runs(lim) == 1), "{n:#?}");
         }
-        let n = parse_latex(r"\begin{matrix}a b&c d\\e f&g\end{matrix}");
-        let MNode::Matrix { rows, .. } = &n[0] else { panic!("{n:#?}") };
-        assert!(rows.iter().flatten().all(|c| c.len() == 1), "{rows:#?}");
-        let n = parse_latex(r"\hat{ab}\underbrace{ab}\underset{ab}{cd}");
-        let runs = |a: &Arg| a.iter().filter(|n| matches!(n, MNode::Run(_))).count();
-        assert!(matches!(&n[0], MNode::Acc { e, .. } if runs(e) == 1), "{n:#?}");
-        assert!(matches!(&n[1], MNode::GroupChr { e, .. } if runs(e) == 1), "{n:#?}");
-        assert!(matches!(&n[2], MNode::Lim { e, lim, .. } if runs(e) == 1 && runs(lim) == 1), "{n:#?}");
     }
 
     #[test]

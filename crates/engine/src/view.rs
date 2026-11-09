@@ -84,6 +84,7 @@ pub struct ViewState {
     #[serde(default)]
     pub hide_ink: bool,
     /// Draw tab: the tool dragging on the page uses, and each pen's colour and thickness.
+    #[cfg(feature = "editing")]
     #[serde(default)]
     pub draw: crate::cmd::draw::DrawState,
     /// Show field codes instead of their results (`view.fieldCodes`, Alt+F9).
@@ -95,6 +96,7 @@ pub struct ViewState {
     #[serde(default)]
     pub hide_white_space: bool,
     /// Outline view: collapsed headings, Show Level, first lines, text formatting.
+    #[cfg(feature = "editing")]
     #[serde(default)]
     pub outline: crate::cmd::outline::OutlineState,
     /// Developer › Design Mode: every content control shows its frame and title.
@@ -210,9 +212,11 @@ impl Default for ViewState {
             proofing: true,
             numeral: NumeralMode::default(),
             hide_ink: false,
+            #[cfg(feature = "editing")]
             draw: Default::default(),
             field_codes: false,
             hide_white_space: false,
+            #[cfg(feature = "editing")]
             outline: Default::default(),
             design_mode: false,
             full_screen: false,

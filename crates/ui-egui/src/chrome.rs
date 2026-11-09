@@ -5,9 +5,12 @@
 
 use crate::{StatusCount, StatusCounts, WordApp};
 
+#[cfg(feature = "full")]
 pub(crate) mod screen_bar;
+#[cfg(feature = "full")]
 pub(crate) mod search;
 pub(crate) mod status_bar;
+#[cfg(feature = "full")]
 pub(crate) mod title_bar;
 
 /// The open state of every popup the title bar and status bar own, and how their controls fit the window. Kept on
@@ -15,12 +18,16 @@ pub(crate) mod title_bar;
 #[derive(Default)]
 pub(crate) struct ChromeOpen {
     /// The Undo drop-down.
+    #[cfg(feature = "full")]
     pub(crate) undo: bool,
     /// The actions marked in the open Undo drop-down; back to none whenever the drop-down is closed.
+    #[cfg(feature = "full")]
     pub(crate) undo_mark: craft::ui::list::UndoMark,
     /// The command search.
+    #[cfg(feature = "full")]
     pub(crate) search: bool,
     /// How the title bar's controls at the end fit the room the leading controls leave them.
+    #[cfg(feature = "full")]
     pub(crate) title_fit: Fit,
     /// How the status bar's controls fit the room the page leaves them.
     pub(crate) status_fit: Fit,
@@ -90,6 +97,7 @@ pub(crate) fn interface_direction() -> craft::i18n::Direction {
 }
 
 /// Why the caret's language isn't spell-checked (dictionary unreadable or missing), if it isn't.
+#[cfg(feature = "full")]
 pub(crate) fn dictionary_problem(lang: &str, unreadable: &Option<(std::path::PathBuf, String)>, missing: Option<&str>) -> Option<String> {
     match (unreadable, missing) {
         (Some((file, reason)), _) => Some(crate::i18n::fmt(
@@ -107,10 +115,12 @@ pub(crate) fn dictionary_problem(lang: &str, unreadable: &Option<(std::path::Pat
 }
 
 /// Commands the Quick Access Toolbar's menu offers to show or hide with one click (#376).
+#[cfg(feature = "full")]
 pub(super) const QAT_MENU: [&str; 10] =
     ["file.new", "file.open", "file.save", "file.print", "edit.undo", "edit.redo", "edit.repeat", "review.spelling", "view.readMode", "insert.table"];
 
 /// Match the toolbar's enabled state for keyboard activation too.
+#[cfg(feature = "full")]
 pub(crate) fn qat_enabled(ctx: &egui::Context, app: &WordApp, id: &str) -> bool {
     match id {
         // In the Markdown Source pane Undo and Redo are the field's own typing history (S-L187), which the
@@ -126,6 +136,7 @@ pub(crate) fn qat_enabled(ctx: &egui::Context, app: &WordApp, id: &str) -> bool 
 }
 
 /// The Undo list's rows, newest first: each step named as the Undo button's tooltip names it.
+#[cfg(feature = "full")]
 pub(crate) fn undo_list_rows(app: &WordApp) -> Vec<String> {
     app.session.undo_history().into_iter().map(|l| tl!(l).to_string()).collect()
 }

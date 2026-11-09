@@ -1,5 +1,9 @@
-use super::cells::{cell, cell_at, grid_cols, row_ends, selected_cells};
-use super::{CmdError, CmdResult, Paragraph, Path, Pos, Selection, Session, StoryRef, Value, sel_result};
+#[cfg(feature = "editing")]
+use super::Value;
+#[cfg(feature = "editing")]
+use super::cells::{cell, selected_cells};
+use super::cells::{cell_at, grid_cols, row_ends};
+use super::{CmdError, CmdResult, Paragraph, Path, Pos, Selection, Session, StoryRef, sel_result};
 
 /// Ctrl+A in a table, as in Word: the cell, then its row, then the table. A nested table that
 /// is already fully selected grows to the cell around it. Returns `None` when the next step is
@@ -48,6 +52,7 @@ pub(super) fn select_cells(s: &mut Session, tp: &Path, which: Option<(usize, Opt
 }
 
 /// Table Layout › Table › Select › Select Column: the grid columns of the selected cells, every row.
+#[cfg(feature = "editing")]
 pub(super) fn select_column(s: &mut Session, _: &Value) -> CmdResult {
     let (tp, r, c) = cell(s)?;
     let story = s.sel.focus.story;

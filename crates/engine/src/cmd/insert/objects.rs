@@ -45,33 +45,7 @@ pub(super) fn table(s: &mut Session, v: &Value) -> CmdResult {
     Ok(json!({"table": path.0}))
 }
 
-/// Minimal base64 (standard alphabet, padding optional, whitespace ignored).
-pub fn base64_decode(s: &str) -> Option<Vec<u8>> {
-    let mut out = Vec::with_capacity(s.len() * 3 / 4);
-    let mut buf = 0u32;
-    let mut n = 0;
-    for c in s.bytes() {
-        let v = match c {
-            b'A'..=b'Z' => c - b'A',
-            b'a'..=b'z' => c - b'a' + 26,
-            b'0'..=b'9' => c - b'0' + 52,
-            b'+' | b'-' => 62,
-            b'/' | b'_' => 63,
-            b'=' | b' ' | b'\n' | b'\r' | b'\t' => continue,
-            _ => return None,
-        } as u32;
-        buf = (buf << 6) | v;
-        n += 6;
-        if n >= 8 {
-            n -= 8;
-            out.push((buf >> n) as u8);
-            buf &= (1 << n) - 1;
-        }
-    }
-    Some(out)
-}
-
-pub use craft_mime::transfer::base64 as base64_encode;
+pub use crate::io::{base64_decode, base64_encode};
 
 pub(crate) fn picture(s: &mut Session, v: &Value) -> CmdResult {
     let bytes = if let Some(d) = p::str(v, "data") {

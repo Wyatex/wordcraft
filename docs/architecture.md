@@ -1,6 +1,6 @@
 # WordCraft architecture
 
-> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-11-05 · **Change:** trivial (the hostile-parameter test now has a sibling for `file.*`, `insert.picture` and `insert.textFromFile`; previously trivial: craft-proof's row says what a build without the Language data keeps: English spelling from an installed Hunspell English or the built-in list, rule hyphenation for Bulgarian, Turkish and Russian; previously minor: proofing moved out: `wordcraft-proof` is craft-libs' `craft-proof`, its Language data craft-i18n's `language-data/` embedded from `CRAFT_I18N_DIR`; previously major: crate and layer inventory, source counts, proofing languages and module boundaries re-measured from this checkout; previously minor: `proof` is per language: English and Polish; previously major: first committed version; `plan/architecture.md` is local-only) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-11-05 · **Change:** minor (added the `wordcraft-preview` browser/WASM and NPM host; it shares the engine, readers and layout with `wordcraft-web` and keeps preview mutability at the session boundary; previously trivial: the hostile-parameter test now has a sibling for `file.*`, `insert.picture` and `insert.textFromFile`; previously trivial: craft-proof's row says what a build without the Language data keeps: English spelling from an installed Hunspell English or the built-in list, rule hyphenation for Bulgarian, Turkish and Russian; previously minor: proofing moved out: `wordcraft-proof` is craft-libs' `craft-proof`, its Language data craft-i18n's `language-data/` embedded from `CRAFT_I18N_DIR`; previously major: crate and layer inventory, source counts, proofing languages and module boundaries re-measured from this checkout; previously minor: `proof` is per language: English and Polish; previously major: first committed version; `plan/architecture.md` is local-only) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 How WordCraft is built today. The longer design notes in
 `plan/architecture.md` are gitignored and local to the original author's machine; this file is the
@@ -9,9 +9,9 @@ committed, current summary. Rules for working in the code are in [`AGENTS.md`](.
 ## Layers
 
 On 2026-10-28, `find crates apps xtask -type f -name '*.rs' -print0 | xargs -0 wc -l` counted
-333,448 Rust source lines across 16 crates, 3 apps and `xtask`. `Cargo.toml` declares workspace
-members with `crates/*`, `apps/*` and `xtask`; `cargo xtask layers` verified 20 workspace packages
-(16 crates, 3 apps and `xtask`) and no layering violations. The layer and line counts below are
+333,448 Rust source lines across 16 crates, 4 apps and `xtask`. `Cargo.toml` declares workspace
+members with `crates/*`, `apps/*` and `xtask`; `cargo xtask layers` verified 21 workspace packages
+(16 crates, 4 apps and `xtask`) and no layering violations. The layer and line counts below are
 from that command and per-directory `find ... -name '*.rs' ... | wc -l` counts on that date. Each
 crate name links to its source tree.
 
@@ -36,6 +36,7 @@ crate name links to its source tree.
 | apps | [`wordcraft`](../apps/wordcraft/src) | 3,740 | Desktop app (eframe + wgpu; logging, window geometry and file associations) |
 | apps | [`wordcraft-cli`](../apps/wordcraft-cli/src) | 1,901 | `convert`, `text`, `inspect`, `run`, `commands`, `parity`, `mcp` and `zotero` |
 | apps | [`wordcraft-web`](../apps/wordcraft-web/src) | 1,159 | Browser build (eframe web runner, WebGPU with WebGL2 fallback) |
+| apps | [`wordcraft-preview`](../apps/wordcraft-preview/src) | — | Read-only browser document preview and `wordcraft-preview` WASM/NPM package; bounded File/Blob inbox, page navigation, zoom, search, theme and language controls |
 | tooling | [`xtask`](../xtask/src) | 1,488 | Workspace maintenance and quality-gate commands, including `layers` |
 
 ## Data flow

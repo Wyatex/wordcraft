@@ -158,7 +158,10 @@ pub fn strict_report(
     let any_page = lay.pages.iter().enumerate().any(|(n, _)| pages.as_ref().is_none_or(|r| r.contains(&n)));
     if any_page && let Some(wm) = &doc.settings.watermark {
         let max = match output {
+            #[cfg(feature = "pdf")]
             StrictOutput::Pdf => wordcraft_pdf::WATERMARK_MAX_CHARS,
+            #[cfg(not(feature = "pdf"))]
+            StrictOutput::Pdf => usize::MAX,
             StrictOutput::Png => usize::MAX,
         };
         missing.merge(wordcraft_layout::missing_watermark_glyphs(wm, max));
@@ -192,6 +195,7 @@ pub fn strict_report(
 
 /// The PDF export's options for `opts`: the one place they are built, shared by the export and
 /// its strict check.
+#[cfg(feature = "pdf")]
 pub(crate) fn pdf_options(opts: &ExportOptions) -> wordcraft_pdf::PdfOptions {
     wordcraft_pdf::PdfOptions {
         include_markup: opts.markup,
@@ -212,6 +216,7 @@ pub(crate) fn png_display() -> DisplayOptions {
 }
 
 /// The strict report of a PDF export of `doc`: every page, laid out as the export lays it out.
+#[cfg(feature = "pdf")]
 pub(crate) fn pdf_report(doc: &Document, opts: &ExportOptions) -> StrictReport {
     let pdf = pdf_options(opts);
     let lay = wordcraft_layout::layout(doc, &mut LayoutCache::new(), &pdf.layout_options());
@@ -220,6 +225,7 @@ pub(crate) fn pdf_report(doc: &Document, opts: &ExportOptions) -> StrictReport {
 
 /// The PDF of `doc`; with `opts.strict`, only if nothing is missing, laid out once for the check
 /// and the export.
+#[cfg(feature = "pdf")]
 pub(crate) fn export_pdf(doc: &Document, opts: &ExportOptions) -> Result<Vec<u8>, String> {
     let pdf = pdf_options(opts);
     if !opts.strict {

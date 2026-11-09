@@ -3,39 +3,63 @@
 //! same result without the dialog.
 
 use craft::ui::dialog::DialogId;
+#[cfg(feature = "full")]
 use craft::ui::patterns::form_dialogs::AboutTab;
 use serde_json::Value;
 
 use crate::WordApp;
 
+#[cfg(feature = "full")]
 mod bookmarks;
+#[cfg(feature = "full")]
 mod customize_keyboard;
+#[cfg(feature = "full")]
 mod enclose;
+#[cfg(feature = "full")]
 mod find;
+#[cfg(feature = "full")]
 mod find_replace;
+#[cfg(feature = "full")]
 mod font;
+#[cfg(feature = "full")]
 mod forms;
 pub(crate) mod host;
+#[cfg(feature = "full")]
 mod link;
+#[cfg(feature = "full")]
 mod macros;
+#[cfg(feature = "full")]
 mod mailings;
+#[cfg(feature = "full")]
 pub(crate) mod merge_dialogs;
+#[cfg(feature = "full")]
 mod page_setup;
+#[cfg(feature = "full")]
 mod paragraph;
+#[cfg(feature = "full")]
 mod paste_special;
+#[cfg(feature = "full")]
 mod phonetic;
 pub(crate) mod prompts;
+#[cfg(feature = "full")]
 mod search_commands;
+#[cfg(feature = "full")]
 mod simple_forms;
+#[cfg(feature = "full")]
 pub(crate) mod style_forms;
+#[cfg(feature = "full")]
 mod styles;
 
+#[cfg(feature = "full")]
 pub(crate) use find::{NOT_IN_SEARCH, SEARCH_SUGGESTIONS, find_in_navigation_pane};
+#[cfg(feature = "full")]
 pub use forms::{CustomPropertiesForm, TableForm, TableProperties};
 #[cfg(test)]
 pub(crate) use host::close_all;
+#[cfg(feature = "full")]
 #[cfg(test)]
 pub(crate) use mailings::{FilterRow, RecipientDraft, RecipientFilter, RecipientListDialog, hold_rows, merge_order, visible_recipients};
+#[cfg(feature = "full")]
 pub(crate) use page_setup::PAPER_LABELS;
 
 /// Opens the dialog `name` for a script, a button or a command, with `params`; the module of the name reads what it
@@ -46,6 +70,16 @@ pub fn open(app: &mut WordApp, name: &str, params: &Value) -> Option<DialogId> {
 }
 
 /// The name table: the one place a dialog name picks its module. `parent` is the dialog the new one opens over.
+#[cfg(not(feature = "full"))]
+fn route(app: &mut WordApp, name: &str, params: &Value, parent: Option<DialogId>) -> Option<DialogId> {
+    match name {
+        "password" | "encryptPassword" | "discardRecovery" => prompts::open(app, name, params, parent),
+        _ => None,
+    }
+}
+
+/// The name table: the one place a dialog name picks its module. `parent` is the dialog the new one opens over.
+#[cfg(feature = "full")]
 fn route(app: &mut WordApp, name: &str, params: &Value, parent: Option<DialogId>) -> Option<DialogId> {
     match name {
         "about" => host::open_about(app, AboutTab::About),
@@ -103,20 +137,36 @@ fn route(app: &mut WordApp, name: &str, params: &Value, parent: Option<DialogId>
     }
 }
 
+#[cfg(feature = "full")]
 pub mod dialogs_bullet;
+#[cfg(feature = "full")]
 pub mod dialogs_chart;
+#[cfg(feature = "full")]
 pub mod dialogs_controls;
+#[cfg(feature = "full")]
 pub mod dialogs_insert;
+#[cfg(feature = "full")]
 pub mod dialogs_layout;
+#[cfg(feature = "full")]
 pub mod dialogs_lists;
+#[cfg(feature = "full")]
 pub mod dialogs_notes;
+#[cfg(feature = "full")]
 pub mod dialogs_para;
+#[cfg(feature = "full")]
 pub mod dialogs_refs;
+#[cfg(feature = "full")]
 pub mod dialogs_review;
+#[cfg(feature = "full")]
 pub mod dialogs_ribbon;
+#[cfg(feature = "full")]
 pub mod dialogs_smart_art;
+#[cfg(feature = "full")]
 pub mod dialogs_table_style;
+#[cfg(feature = "full")]
 pub mod dialogs_templates;
+#[cfg(feature = "full")]
 mod dialogs_view;
+#[cfg(feature = "full")]
 #[cfg(test)]
 mod tests;

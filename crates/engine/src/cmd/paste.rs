@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 use wordcraft_doc::edit::Fragment;
-use wordcraft_doc::{Block, Document, Paragraph};
+use wordcraft_doc::{Block, Document};
 
 use super::{delete_selection, sel_result};
 use crate::{CmdError, CmdResult, CommandSpec, Selection, Session, p};
@@ -21,8 +21,6 @@ use crate::{CmdError, CmdResult, CommandSpec, Selection, Session, p};
 pub const MAX_PASTE_BYTES: usize = 16 << 20;
 /// Largest clipboard picture Paste Special accepts (base64), in bytes.
 pub const MAX_PICTURE_BYTES: usize = 96 << 20;
-/// Nesting depth we follow when adjusting pasted tables.
-const MAX_DEPTH: usize = 64;
 
 /// The formats, in the order the dialog lists them: (id, label).
 pub const FORMATS: [(&str, &str); 5] = [
@@ -411,24 +409,7 @@ pub fn insert(s: &mut Session, mut frag: Fragment) -> Result<(), CmdError> {
     Ok(())
 }
 
-/// Every paragraph in a block, tables included (bounded depth).
-pub(crate) fn each_para(b: &mut Block, depth: usize, f: &mut dyn FnMut(&mut Paragraph)) {
-    if depth > MAX_DEPTH {
-        return;
-    }
-    match b {
-        Block::Para(p) => f(p),
-        Block::Table(t) => {
-            for row in &mut t.rows {
-                for cell in &mut row.cells {
-                    for cb in &mut cell.blocks {
-                        each_para(Arc::make_mut(cb), depth + 1, f);
-                    }
-                }
-            }
-        }
-    }
-}
+pub(crate) use crate::io::each_para;
 
 /// Section breaks brought in from another document keep their page, but their header and
 /// footer ids are that document's: clear them (and the different first page that went with

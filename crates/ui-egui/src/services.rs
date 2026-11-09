@@ -4,6 +4,7 @@
 pub struct Services {
     /// Printing: the print job layer over the host's jobs (desktop printers, the browser's print
     /// dialog on the web).
+    #[cfg(feature = "full")]
     pub print: Option<craft::print::spool::Spool>,
     /// Web: told whether the document has unsaved changes after each pass, for the browser's
     /// leave-page guard (`beforeunload` runs between frames and can't ask the app).

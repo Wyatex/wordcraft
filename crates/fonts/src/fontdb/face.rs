@@ -13,6 +13,7 @@ pub fn bundled() -> &'static [&'static [u8]] {
     BUNDLED
 }
 
+#[cfg(feature = "all-fonts")]
 pub(super) static BUNDLED: &[&[u8]] = &[
     include_bytes!("../../../../assets/fonts/SourceSans3-Regular.ttf"),
     include_bytes!("../../../../assets/fonts/SourceSans3-Semibold.ttf"),
@@ -28,6 +29,9 @@ pub(super) static BUNDLED: &[&[u8]] = &[
     include_bytes!("../../../../assets/fonts/Inter-SemiBold.ttf"),
     include_bytes!("../../../../assets/fonts/JetBrainsMono-Regular.ttf"),
 ];
+
+#[cfg(not(feature = "all-fonts"))]
+pub(super) static BUNDLED: &[&[u8]] = &[include_bytes!("../../../../assets/fonts/SourceSans3-Regular.ttf")];
 
 #[derive(Clone)]
 pub(super) enum FontBytes {

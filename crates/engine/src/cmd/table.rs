@@ -1,43 +1,72 @@
 //! Table Design and Table Layout tabs.
 
+#[cfg(feature = "editing")]
 use super::table_formula::parse_number;
+#[cfg(feature = "editing")]
 use serde_json::{Value, json};
+#[cfg(feature = "editing")]
 use wordcraft_doc::collate::{SortKey, sort_key};
+#[cfg(feature = "editing")]
 use wordcraft_doc::props::{Align, Border, BorderStyle, Borders, HeightRule, Rgb, TextDirection, VAlign};
-use wordcraft_doc::{Block, Document, InlineObject, Paragraph, Path, Pos, RevisionKind, StoryRef, Table, para_block};
+#[cfg(feature = "editing")]
+use wordcraft_doc::{Block, InlineObject, RevisionKind, para_block};
+use wordcraft_doc::{Document, Paragraph, Path, Pos, StoryRef, Table};
 
 use super::sel_result;
-use crate::{CmdError, CmdResult, CommandSpec, Selection, Session, p};
+use crate::{CmdError, CmdResult, Selection, Session};
+#[cfg(feature = "editing")]
+use crate::{CommandSpec, p};
 
 mod cells;
+#[cfg(feature = "editing")]
 mod clear;
+#[cfg(feature = "editing")]
 mod convert;
+#[cfg(feature = "editing")]
 mod layout;
 mod select;
 mod structure;
 
+#[cfg(feature = "editing")]
+pub(crate) use cells::cell_text;
 pub(super) use cells::grid_cols;
+pub(crate) use cells::row_ends;
 pub use cells::selected_cells;
+#[cfg(feature = "editing")]
 use cells::{cell, with_cells, with_table};
-pub(crate) use cells::{cell_text, row_ends};
+#[cfg(feature = "editing")]
 pub(super) use clear::clear_range_cells;
+#[cfg(feature = "editing")]
 pub(crate) use clear::{backspace_cells, clear_cells};
+#[cfg(feature = "editing")]
 use clear::{cell_prefix, guard_delete, text_spans};
+#[cfg(feature = "editing")]
 use convert::{formula, from_text, quick_table, sort_table, to_text};
+#[cfg(feature = "editing")]
 pub use convert::{text_table_cells, text_table_lines};
+#[cfg(feature = "editing")]
 use layout::{autofit, borders, fix_caret, properties, set_column_widths};
+#[cfg(feature = "editing")]
 pub(crate) use layout::{sync_cell_widths, text_direction, touch_cells};
 pub(crate) use select::{extend_selection, grow_select_all, select_cell_first, select_range};
+#[cfg(feature = "editing")]
 use select::{select_cells, select_column};
+#[cfg(feature = "editing")]
+pub(super) use structure::delete_table_at;
+pub(super) use structure::selected_table;
+#[cfg(feature = "editing")]
 pub use structure::split_targets;
+#[cfg(feature = "editing")]
 pub(super) use structure::{col, row};
+#[cfg(feature = "editing")]
 use structure::{del_col, del_row, del_table, merge, split, split_table};
-pub(super) use structure::{delete_table_at, selected_table};
 
+#[cfg(feature = "editing")]
 fn in_table(s: &Session) -> Option<&'static str> {
     if s.sel.focus.path.cell().is_some() { None } else { Some("the cursor isn't in a table") }
 }
 
+#[cfg(feature = "editing")]
 pub fn specs() -> Vec<CommandSpec> {
     let t = |c: CommandSpec| c.when(in_table);
     vec![

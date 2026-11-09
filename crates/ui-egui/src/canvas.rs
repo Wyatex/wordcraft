@@ -5,6 +5,7 @@
 // PLAN: `Cargo.toml` (app-hub) needs `craft-pages`, `craft-ui-canvas`, `craft-review` and `craft-behavior`
 // as dependencies for the paths below.
 
+#[cfg(feature = "full")]
 use std::cell::Cell;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -22,18 +23,23 @@ use craft::ui::style::DataColor;
 use egui::{Color32, Pos2, Rect, Ui, pos2, vec2};
 use serde_json::json;
 use wordcraft_doc::{PartKind, Pos, StoryRef};
+#[cfg(feature = "full")]
 use wordcraft_layout::display::CommentDisplay;
 use wordcraft_layout::{DocLayout, Page, Placed};
 
 use crate::WordApp;
 
+#[cfg(feature = "full")]
 mod balloons;
 mod caret;
+#[cfg(feature = "full")]
 mod column_ruler;
 pub(crate) mod context_menu;
+#[cfg(feature = "full")]
 #[cfg(test)]
 pub(crate) use context_menu::issue_heading;
 mod cursor;
+#[cfg(feature = "full")]
 mod equation_frame;
 mod geometry;
 mod gridlines;
@@ -43,30 +49,39 @@ mod navigation;
 mod pages;
 mod reading;
 mod reading_metrics;
+#[cfg(feature = "full")]
 pub(crate) mod rulers;
 mod source;
 mod story;
 
+#[cfg(feature = "full")]
 pub use balloons::{deselect_balloon, select_balloon};
 use context_menu::ContextAsk;
+#[cfg(feature = "full")]
 pub(crate) use cursor::caret_color_on;
 #[cfg(test)]
 pub(crate) use cursor::caret_contrast;
 pub use cursor::{caret_screen, pos_from_screen};
 pub use geometry::{markup_width, sync_fit_zoom};
 use input::UnitDrag;
+#[cfg(feature = "full")]
 pub(crate) use input::{hold_document_selection, release_document_selection};
+#[cfg(feature = "full")]
 pub(crate) use links::follow_link;
 #[cfg(test)]
 use links::{field_link, is_followable_link, is_generated_bookmark_link};
 pub use navigation::page_to_screen;
 use navigation::viewed_page;
-pub(crate) use pages::{PageKeys, dark_page, page_doc, page_screen_scale, preview_sel, screen_render_options};
+pub(crate) use pages::{PageKeys, page_doc, page_screen_scale, preview_sel};
+#[cfg(feature = "full")]
+pub(crate) use pages::{dark_page, screen_render_options};
 use pages::{page_render_options, shown_layout};
 use reading::{reading_anchor_page, reading_page_start, web_layout_width};
 use story::dims_body;
+pub(crate) use story::part_kind;
+#[cfg(feature = "full")]
+pub(crate) use story::text_box_host;
 pub use story::{editing_header_footer, in_text_box};
-pub(crate) use story::{part_kind, text_box_host};
 
 /// Points on screen per document point at 100% (96 px per inch, like a word processor).
 pub const PX_PER_PT: f32 = SCREEN_POINTS_PER_POINT as f32;
@@ -113,30 +128,39 @@ pub struct CanvasState {
     /// The caret's glide and blink.
     pub(crate) glide: crate::caret_glide::CaretGlide,
     /// The comment selection and drafts, shared by the Comments pane and the balloons.
+    #[cfg(feature = "full")]
     pub(crate) comments: craft::review::ui::CommentsPanelState,
     /// The one context-menu ask waiting for the pass (`ui.contextMenu`).
     pub(crate) context_request: Option<ContextAsk>,
     /// A press on a table's selection area or move handle is held (`table_mouse`).
+    #[cfg(feature = "full")]
     pub(crate) table_dragging: bool,
     /// The table border drag in progress, a ruler's too, from the press to its release or cancel: the page paints
     /// its dashed preview from it (`table_resize`).
+    #[cfg(feature = "full")]
     pub(crate) table_resize: Option<crate::table_resize::ResizeDrag>,
     /// The ruler drag's gesture, from its first applied step to its commit or cancel.
     // PLAN: assumed `craft::behavior::GestureId` (the framework's `behavior::value::GestureId`).
+    #[cfg(feature = "full")]
     pub(crate) ruler_gesture: Option<craft::behavior::GestureId>,
     /// The content control's open popup, until it closes.
+    #[cfg(feature = "full")]
     pub(crate) control_popup: Option<crate::content_controls::ControlPopup>,
     /// The SmartArt text typing run in progress.
     // PLAN: assumed `dialogs_smart_art::TypingRun` (dialogs-w17).
+    #[cfg(feature = "full")]
     pub(crate) smart_art_run: Option<crate::dialogs_smart_art::TypingRun>,
     /// The object gesture the page tool holds.
     // PLAN: written by canvas-w10's page tool; `ObjectGesture` is canvas-w11's.
+    #[cfg(feature = "full")]
     pub(crate) object_gesture: Option<crate::objects::ObjectGesture>,
     /// A press on a part of the selected object's frame (a handle to size it, the one to turn it) is open: the
     /// frame is the framework's `TransformBox`, not the page tool's [`ObjectGesture`], so it is recorded here, each
     /// pass, from the box's output.
+    #[cfg(feature = "full")]
     pub(crate) frame_held: bool,
     /// The picture pixels of the object the frame's turn handle is turning, drawn once for the turn.
+    #[cfg(feature = "full")]
     pub(crate) turning: Option<crate::objects::Turning>,
     /// Page content fingerprints of the current layout, for the page revision.
     pub(crate) page_keys: PageKeys,
@@ -145,6 +169,7 @@ pub struct CanvasState {
     pub(crate) caret_bg: Option<(u64, Color32)>,
     /// Whether the document has tracked formatting changes, moves and deletions, by document
     /// revision: finding out walks every paragraph, too slow for every frame (#811).
+    #[cfg(feature = "full")]
     markup_facts: Cell<Option<((u64, u64), [bool; 3])>>,
     pub scroll_to_caret: bool,
     /// Set while a command runs for a mouse drag on a table: the pointer is already
@@ -184,35 +209,46 @@ pub struct CanvasState {
     /// The chars of `ime_preedit` the input method marks as its cursor or selection, as it reports
     /// them (unchecked).
     pub(crate) ime_preedit_range: Option<std::ops::Range<usize>>,
+    #[cfg(feature = "full")]
     pub context_issue: Option<serde_json::Value>,
+    #[cfg(feature = "full")]
     pub context_synonyms: Option<serde_json::Value>,
     /// The right-click context menu is open (the mini toolbar stands down while it is).
     pub context_menu_open: bool,
     /// Where the open context menu is anchored: the framework keeps an anchor only for a context opening, and this menu opens by the app's one ask.
     pub(crate) context_menu_at: Option<Pos2>,
     /// Screen rect of the selection's first line, for the floating mini toolbar.
+    #[cfg(feature = "full")]
     pub mini_anchor: Option<Rect>,
     /// The selection the mini toolbar was put away for by a click outside the document (the
     /// ribbon, a pane, the status bar); it comes back when the selection changes.
+    #[cfg(feature = "full")]
     pub mini_dismissed: Option<wordcraft_engine::Selection>,
     /// Crop mode (Picture Format › Crop) is on for the picture here (`crop`).
+    #[cfg(feature = "full")]
     pub(crate) crop: Option<wordcraft_doc::Pos>,
     /// An ink stroke being drawn with a pen (Draw tab).
+    #[cfg(feature = "full")]
     pub(crate) ink: Option<crate::ink::InkDrag>,
     /// The eraser is down: whether it has erased anything in this drag yet.
+    #[cfg(feature = "full")]
     pub(crate) erasing: Option<bool>,
     /// The lasso being drawn or dragged, and Ink Replay (Draw tab).
+    #[cfg(feature = "full")]
     pub(crate) ink_ui: crate::ink::InkUi,
     /// Synchronous Scrolling (#322): document points the partner window scrolled, still to apply…
     pub(crate) sync_in: f32,
     /// …and this window's own scrolling since the last frame, for the partner.
     pub(crate) sync_out: f32,
     /// Screen rects of the comment balloons last frame (for the control channel and tests).
+    #[cfg(feature = "full")]
     pub balloon_rects: Vec<(u32, Rect)>,
     /// Draw Table or Eraser is on (`table_pen`): presses draw instead of moving the caret.
+    #[cfg(feature = "full")]
     pub table_tool: Option<crate::table_pen::TableTool>,
     /// The Draw Table stroke (or eraser press) in progress, written during one gesture and cleared on release
     /// or cancel.
+    #[cfg(feature = "full")]
     pub(crate) table_stroke: Option<crate::table_pen::PenStroke>,
     /// An input method's `DeleteSurrounding` just erased text with this formatting: the text it
     /// sends next replaces it, keeps the formatting and joins the same undo step
@@ -220,6 +256,7 @@ pub struct CanvasState {
     pub(crate) ime_join_text: Option<wordcraft_doc::props::CharProps>,
     /// An automatic change (AutoCorrect, AutoFormat) altered the text around the caret: the
     /// input method is asked to start afresh (#1480).
+    #[cfg(feature = "full")]
     pub(crate) ime_reset: bool,
     /// A replacement or an unsupported IME mutation means the next observation must interrupt
     /// the live composition, whatever the surrounding text looks like.
@@ -245,6 +282,7 @@ pub struct CanvasState {
     /// The preview a bar list (font, size, highlight, font colour) started: the framework reports a
     /// list's preview once, when it starts (`Preview::Shows`) and once when it ends, so the bar keeps
     /// it here and re-asserts it each frame until the list's `Preview::Ended`.
+    #[cfg(feature = "full")]
     pub(crate) list_preview: Option<(String, serde_json::Value)>,
     /// The scroll offset held while a command preview is shown, so the page does not move as
     /// the previewed text reflows.
@@ -266,6 +304,7 @@ impl CanvasState {
     /// where it was rather than going to the caret.
     pub(crate) fn show_other_document(&mut self, seen: bool) {
         let old = std::mem::take(self);
+        #[cfg(feature = "full")]
         let ime_reset = !old.ime_preedit.is_empty() || old.ime_preedit_range.is_some();
         *self = CanvasState {
             last_highlight: old.last_highlight,
@@ -277,12 +316,14 @@ impl CanvasState {
             // The pages it placed were the old document's.
             shown: ShownPages { pages: Vec::new(), laid: Vec::new(), ..old.shown },
             scroll_to_caret: !seen,
+            #[cfg(feature = "full")]
             ime_reset,
             ..CanvasState::default()
         };
     }
 
     /// Stop a text-selection drag when the pointer gesture becomes an object drag.
+    #[cfg(feature = "full")]
     pub(crate) fn cancel_text_drag(&mut self) {
         self.dragging = false;
         self.column_drag = None;
@@ -299,6 +340,7 @@ impl CanvasState {
 
     /// Asks for the page's keyboard focus once this pass is over, for a control whose press moves focus at the
     /// pass's end (a ribbon tab: the framework's press focus would override a request made in the pass).
+    #[cfg(feature = "full")]
     pub(crate) fn focus_page_after_pass(&mut self) {
         self.focus_after_pass = Some(Vec::new());
     }
@@ -306,6 +348,7 @@ impl CanvasState {
     /// [`focus_page_after_pass`](Self::focus_page_after_pass) for a menu that closed this pass, opened by `opener`:
     /// only while focus is still in the menu or back on its opener then. The press that closed it may have given a
     /// field the focus, which keeps it.
+    #[cfg(feature = "full")]
     pub(crate) fn focus_page_after_menu(&mut self, ctx: &egui::Context, opener: egui::Id) {
         if self.focus_after_pass.is_none() {
             let held = ctx.memory(|m| m.focused());
@@ -364,16 +407,19 @@ impl CanvasState {
     }
 
     /// The object gesture the page tool holds, if one runs.
+    #[cfg(feature = "full")]
     pub(crate) fn object_gesture(&self) -> Option<&crate::objects::ObjectGesture> {
         self.object_gesture.as_ref()
     }
 
     /// Whether a press on a part of the selected object's frame (size or turn handle) is open.
+    #[cfg(feature = "full")]
     pub fn frame_gesture(&self) -> bool {
         self.frame_held
     }
 
     /// The comment whose balloon is selected, as the document's comment id.
+    #[cfg(feature = "full")]
     pub fn selected_balloon(&self) -> Option<u32> {
         self.comments.selected.lead.and_then(|id| u32::try_from(id.0).ok())
     }
@@ -391,18 +437,28 @@ impl Default for CanvasState {
             focus_after_pass: None,
             resident_pictures: 0,
             glide: crate::caret_glide::CaretGlide::default(),
+            #[cfg(feature = "full")]
             comments: Default::default(),
             context_request: None,
+            #[cfg(feature = "full")]
             ruler_gesture: None,
+            #[cfg(feature = "full")]
             control_popup: None,
+            #[cfg(feature = "full")]
             table_dragging: false,
+            #[cfg(feature = "full")]
             table_resize: None,
+            #[cfg(feature = "full")]
             smart_art_run: None,
+            #[cfg(feature = "full")]
             object_gesture: None,
+            #[cfg(feature = "full")]
             frame_held: false,
+            #[cfg(feature = "full")]
             turning: None,
             page_keys: PageKeys::default(),
             caret_bg: None,
+            #[cfg(feature = "full")]
             markup_facts: Cell::new(None),
             scroll_to_caret: true,
             keep_view: false,
@@ -423,22 +479,34 @@ impl Default for CanvasState {
             viewed_page: None,
             ime_preedit: String::new(),
             ime_preedit_range: None,
+            #[cfg(feature = "full")]
             context_issue: None,
+            #[cfg(feature = "full")]
             context_synonyms: None,
             context_menu_open: false,
             context_menu_at: None,
+            #[cfg(feature = "full")]
             mini_anchor: None,
+            #[cfg(feature = "full")]
             mini_dismissed: None,
+            #[cfg(feature = "full")]
             crop: None,
+            #[cfg(feature = "full")]
             ink: None,
+            #[cfg(feature = "full")]
             erasing: None,
+            #[cfg(feature = "full")]
             ink_ui: Default::default(),
             sync_in: 0.0,
             sync_out: 0.0,
+            #[cfg(feature = "full")]
             balloon_rects: Vec::new(),
+            #[cfg(feature = "full")]
             table_tool: None,
+            #[cfg(feature = "full")]
             table_stroke: None,
             ime_join_text: None,
+            #[cfg(feature = "full")]
             ime_reset: false,
             ime_interrupt_now: false,
             ime_interrupted_preedit: false,
@@ -448,6 +516,7 @@ impl Default for CanvasState {
             table_preview: None,
             command_preview: None,
             command_previewed: None,
+            #[cfg(feature = "full")]
             list_preview: None,
             preview_scroll: None,
             table_preview_layout: None,
@@ -513,6 +582,7 @@ fn prepare_layout(app: &mut WordApp, full: Rect, metrics: &ReadingMetrics, side:
 }
 
 /// A click on the page leaves the selected comment balloon.
+#[cfg(feature = "full")]
 fn dismiss_balloon_on_canvas_click(app: &mut WordApp, out: &craft::pages::ui::PageViewOutput) {
     if app.canvas.selected_balloon().is_some() && out.canvas.click_at().is_some() {
         deselect_balloon(app);
@@ -532,10 +602,14 @@ fn hold_scroll_for_preview(app: &mut WordApp, offset: &mut (f64, f64)) -> bool {
 
 /// The selection's rects by page, in page points, from the layout `layout` is of (the preview's while one shows).
 fn selection_page_rects(app: &mut WordApp, layout: &DocLayout) -> Vec<(usize, wordcraft_geom::Rect)> {
+    #[cfg(feature = "full")]
+    let object_selected = crate::objects::selected(app).is_some();
+    #[cfg(not(feature = "full"))]
+    let object_selected = false;
     if let Some(sel) = preview_sel(app) {
         let (a, b) = sel.ordered();
         if a == b { Vec::new() } else { wordcraft_engine::cmd::table_mouse::selection_rects(layout, page_doc(app), &a, &b, app.session.page_hint) }
-    } else if crate::objects::selected(app).is_some() {
+    } else if object_selected {
         Vec::new()
     } else if let Some(range) = app.session.cell_range() {
         wordcraft_engine::cmd::table_mouse::cell_rects(layout, &app.session.doc, range)
@@ -554,6 +628,7 @@ fn selection_page_rects(app: &mut WordApp, layout: &DocLayout) -> Vec<(usize, wo
 
 /// The live selection's rects on screen, from the document's own layout rather than a command
 /// preview's, which can move the lines (Align Right) from under the mini toolbar's pointer.
+#[cfg(feature = "full")]
 fn live_selection_screen_rects(app: &mut WordApp, pages: &[PlacedPage]) -> Vec<Rect> {
     let layout = app.session.layout();
     let selected: Vec<_> = if crate::objects::selected(app).is_some() {
@@ -575,6 +650,7 @@ fn live_selection_screen_rects(app: &mut WordApp, pages: &[PlacedPage]) -> Vec<R
 }
 
 /// Page-point rects on the pages that are on screen, as screen rects.
+#[cfg(feature = "full")]
 fn screen_rects(rects: &[(usize, wordcraft_geom::Rect)], pages: &[PlacedPage]) -> Vec<Rect> {
     rects
         .iter()
@@ -606,6 +682,7 @@ fn mark_areas(app: &mut WordApp, layout: &DocLayout, selected: &[(usize, wordcra
             }
         }
     }
+    #[cfg(feature = "full")]
     if let Some((a, b)) = crate::read_aloud::highlight(app) {
         for (page, r) in layout.selection_rects(&app.session.doc, &a, &b, app.session.page_hint) {
             areas.push(mark_area(page, &r, MarkKind::Spoken));
@@ -690,11 +767,14 @@ fn run_page_tool(app: &mut WordApp, ui: &Ui, layout: &Arc<DocLayout>, body: &Pag
     // PLAN: assumed `keys::page_input(app: &mut WordApp, input: &[EditorInput], pass: &ToolPass, ctx: &egui::Context)` (canvas-w10).
     crate::keys::page_input(app, &pass.editor_input, pass, ui.ctx());
     let host = ToolHost::new().enabled(!app.modal_open());
-    if let Some(mut tool) = crate::ink::active_tool(app, body) {
-        return host.run(ui, pass, &mut tool);
-    }
-    if let Some(mut tool) = crate::table_pen::active_tool(app, body) {
-        return host.run(ui, pass, &mut tool);
+    #[cfg(feature = "full")]
+    {
+        if let Some(mut tool) = crate::ink::active_tool(app, body) {
+            return host.run(ui, pass, &mut tool);
+        }
+        if let Some(mut tool) = crate::table_pen::active_tool(app, body) {
+            return host.run(ui, pass, &mut tool);
+        }
     }
     let mut tool = input::PageTextTool::new(app, layout.clone(), body, Env::of(ui).view().shell());
     host.run(ui, pass, &mut tool)
@@ -717,7 +797,9 @@ fn show_reading(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: R
     let out = ReadingView::new(tl!("Document"), &source, &mut state, paper).zoom(zoom).show_at(ui, columns);
     let nav = ui
         .scope_builder(egui::UiBuilder::new().max_rect(footer), |ui| {
-            ReadingNav::new(&mut state, layout.pages.len()).position(true).action(tl!("Edit Document")).show(ui)
+            let nav_widget = ReadingNav::new(&mut state, layout.pages.len()).position(true);
+            let nav_widget = if app.session.read_only() { nav_widget } else { nav_widget.action(tl!("Edit Document")) };
+            nav_widget.show(ui)
         })
         .inner;
     app.canvas.page_keys = source.into_keys();
@@ -783,13 +865,20 @@ fn show_pages(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: Rec
         app.session.page_hint = c.page;
     }
     let dim_body = dims_body(app, layout);
+    #[cfg(feature = "full")]
     let hidden = crate::objects::dragged_off_page(app.canvas.object_gesture.as_ref());
+    #[cfg(not(feature = "full"))]
+    let hidden = None;
     let selected = selection_page_rects(app, layout);
     let areas = mark_areas(app, layout, &selected);
     let bodies: Vec<(f64, f64)> = layout.pages.iter().map(|p| (f64::from(p.body.y), f64::from(p.body.bottom()))).collect();
-    let show_rulers = app.session.view.ruler
+    #[cfg(feature = "full")]
+    let show_rulers = !app.session.read_only()
+        && app.session.view.ruler
         && app.session.view.mode == wordcraft_layout::ViewMode::Print
         && crate::chrome::Screen::of(&app.session.view) == crate::chrome::Screen::Normal;
+    #[cfg(not(feature = "full"))]
+    let show_rulers = false;
     let options =
         LayoutOptions { markup: f64::from(markup_width(app)), min_columns: if app.session.view.multi_page { 2 } else { 1 }, ..LayoutOptions::WORD };
     let paper = DataColor::new(paper_color(app));
@@ -797,10 +886,16 @@ fn show_pages(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: Rec
     // The describer owns its snapshot, as the source does, so the page view can hold it while the body edits the app.
     let described = preview_sel(app).unwrap_or(app.session.sel_ends()).clone();
     let describer = crate::a11y::DocumentDescriber::new(source.doc(), layout.clone(), (described.anchor.clone(), described.focus.clone()));
+    #[cfg(feature = "full")]
     let regions = crate::table_pen::regions(app, layout);
+    #[cfg(not(feature = "full"))]
+    let regions = Vec::new();
 
     let mut tool_response: Option<ToolHostResponse> = None;
+    #[cfg(feature = "full")]
     let mut strip_click: Option<Pos2> = None;
+    #[cfg(not(feature = "full"))]
+    let strip_click: Option<Pos2> = None;
     let mut caret_after = None;
     let mut body_rect = full;
     let mut body_view = None;
@@ -808,22 +903,29 @@ fn show_pages(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: Rec
     let mut fix = ScrollFix::default();
     // The caret the follow wants whose page the pass did not place: its page, the page's height and the caret.
     let mut unplaced = None;
-    let out = PageView::new(tl!("Document"), &source, &mut state, paper)
+    let mut view = PageView::new(tl!("Document"), &source, &mut state, paper)
         .options(options)
         // Hide White Space cuts each page to its text area: without the bodies the pages show whole.
         .bodies(&bodies)
         .navigation(navigation_options())
         .editor(craft::ui::primitives::EditorPurpose::Text)
         .rulers(show_rulers)
-        .snap(crate::objects::snap(app, layout))
-        .tool_regions(regions)
-        .access(&describer)
-        .show(ui, |ui, body| {
-            body_rect = body.rect;
-            body_view = Some(body.view);
-            // Canvas controls take their presses first, then the tool host runs, then the caret shows over them.
-            TextMarks::over(body.pages).areas(&areas).show_at(ui, body.rect);
-            gridlines::show(app, ui, layout, body);
+        .access(&describer);
+    #[cfg(feature = "full")]
+    {
+        view = view.snap(crate::objects::snap(app, layout));
+    }
+    if !regions.is_empty() {
+        view = view.tool_regions(regions);
+    }
+    let out = view.show(ui, |ui, body| {
+        body_rect = body.rect;
+        body_view = Some(body.view);
+        // Canvas controls take their presses first, then the tool host runs, then the caret shows over them.
+        TextMarks::over(body.pages).areas(&areas).show_at(ui, body.rect);
+        gridlines::show(app, ui, layout, body);
+        #[cfg(feature = "full")]
+        if !app.session.read_only() {
             crate::content_controls::show(app, ui, layout, body);
             strip_click = equation_frame::show(app, ui, layout, body);
             crate::crop::show(app, ui, layout, body);
@@ -834,40 +936,43 @@ fn show_pages(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: Rec
             crate::table_resize::show(app, ui, layout, body);
             crate::ink::show(app, ui, layout, body);
             crate::dialogs_smart_art::frame_button(app, ui, body.pages, layout);
-            if let Some(pass) = body.pass {
-                ran = true;
-                let response = run_page_tool(app, ui, layout, body, pass);
-                // A right click the page tool left asks for the menu: what it clicked becomes the selection first, so
-                // the menu acts on it (the page tool takes the primary button only).
-                if let Some(request) = response.context.filter(|r| !matches!(r.source, ContextSource::Key)) {
-                    input::handle_secondary_selection(app, body, layout, request.at);
-                }
-                tool_response = Some(response);
-                caret::paint_caret(app, ui, pass, body, Env::of(ui).motion.mode);
-                // This pass's keys and press have moved the caret: follow it, not the one from before the pass.
-                let fresh = app.session.layout();
-                caret_after = fresh.caret_on(&preview_sel(app).unwrap_or(app.session.sel_ends()).focus, app.session.page_hint);
-                if app.canvas.scroll_to_caret
-                    && !held
-                    && let Some(c) = &caret_after
-                {
-                    match body.pages.iter().find(|p| p.page == c.page) {
-                        Some(placed) => {
-                            let s = placed.scale as f32;
-                            let top_left = placed.to_screen(Point::new(f64::from(c.x), f64::from(c.top)));
-                            let r = Rect::from_min_size(top_left, vec2((c.width * s).max(2.0), c.height * s)).expand2(vec2(40.0, 60.0));
-                            fix.delta = (
-                                overshoot((r.min.x, r.max.x), (body.rect.min.x, body.rect.max.x)),
-                                overshoot((r.min.y, r.max.y), (body.rect.min.y, body.rect.max.y)),
-                            );
-                        }
-                        None => {
-                            let h = fresh.pages.get(c.page).map_or(1.0, |p| p.h.max(1.0));
-                            fix.go_to = Some((c.page, f64::from(c.top / h)));
-                            unplaced = Some((c.page, h, *c));
-                        }
+        }
+        if let Some(pass) = body.pass {
+            ran = true;
+            let response = run_page_tool(app, ui, layout, body, pass);
+            // A right click the page tool left asks for the menu: what it clicked becomes the selection first, so
+            // the menu acts on it (the page tool takes the primary button only).
+            if let Some(request) = response.context.filter(|r| !matches!(r.source, ContextSource::Key)) {
+                input::handle_secondary_selection(app, body, layout, request.at);
+            }
+            tool_response = Some(response);
+            caret::paint_caret(app, ui, pass, body, Env::of(ui).motion.mode);
+            // This pass's keys and press have moved the caret: follow it, not the one from before the pass.
+            let fresh = app.session.layout();
+            caret_after = fresh.caret_on(&preview_sel(app).unwrap_or(app.session.sel_ends()).focus, app.session.page_hint);
+            if app.canvas.scroll_to_caret
+                && !held
+                && let Some(c) = &caret_after
+            {
+                match body.pages.iter().find(|p| p.page == c.page) {
+                    Some(placed) => {
+                        let s = placed.scale as f32;
+                        let top_left = placed.to_screen(Point::new(f64::from(c.x), f64::from(c.top)));
+                        let r = Rect::from_min_size(top_left, vec2((c.width * s).max(2.0), c.height * s)).expand2(vec2(40.0, 60.0));
+                        fix.delta = (
+                            overshoot((r.min.x, r.max.x), (body.rect.min.x, body.rect.max.x)),
+                            overshoot((r.min.y, r.max.y), (body.rect.min.y, body.rect.max.y)),
+                        );
+                    }
+                    None => {
+                        let h = fresh.pages.get(c.page).map_or(1.0, |p| p.h.max(1.0));
+                        fix.go_to = Some((c.page, f64::from(c.top / h)));
+                        unplaced = Some((c.page, h, *c));
                     }
                 }
+            }
+            #[cfg(feature = "full")]
+            if !app.session.read_only() {
                 // The mini toolbar's anchor is settled in the pass that shows it. Anchor only to visible
                 // selection geometry, and to the live selection while a preview moves the text.
                 let anchor_rects = if app.canvas.command_previewed.is_some() {
@@ -879,7 +984,8 @@ fn show_pages(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: Rec
                 // The bar is its own floating layer: shown after the host, it keeps its buttons' presses (S-L410).
                 crate::mini_toolbar::show(app, ui, body);
             }
-        });
+        }
+    });
     let caret = caret_after.or(caret);
     app.canvas.page_keys = source.into_keys();
     let side = out.spacing.side as f32;
@@ -991,15 +1097,18 @@ fn show_pages(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: Rec
         let _ = app.run("view.hideWhiteSpace", json!({"value": !app.session.view.hide_white_space}));
     }
 
-    dismiss_balloon_on_canvas_click(app, &out);
-    // A press in the document brings back a mini toolbar a click outside it put away (S-L414).
-    if let craft::behavior::PressPhase::Down { start, .. } = &out.canvas.press.phase
-        && start.button == craft::behavior::PointerButton::Primary
+    #[cfg(feature = "full")]
     {
-        app.canvas.mini_dismissed = None;
+        dismiss_balloon_on_canvas_click(app, &out);
+        // A press in the document brings back a mini toolbar a click outside it put away (S-L414).
+        if let craft::behavior::PressPhase::Down { start, .. } = &out.canvas.press.phase
+            && start.button == craft::behavior::PointerButton::Primary
+        {
+            app.canvas.mini_dismissed = None;
+        }
+        balloons::balloons(app, ui, &out, layout);
+        rulers::page_rulers(app, ui, &out, layout);
     }
-    balloons::balloons(app, ui, &out, layout);
-    rulers::page_rulers(app, ui, &out, layout);
     // The one context-menu ask of the pass: Shift+F10 or `ui.contextMenu` (below the caret), a click on the equation
     // frame's options strip, then the tool host's own request by how it was asked for.
     let ask = app.canvas.context_request.take().or_else(|| strip_click.map(ContextAsk::AtPointer));

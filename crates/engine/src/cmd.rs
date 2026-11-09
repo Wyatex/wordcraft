@@ -1,112 +1,198 @@
 //! Command implementations, one module per area. Each module exposes `specs()`.
 
+#[cfg(feature = "editing")]
 pub mod accessibility;
+#[cfg(feature = "editing")]
 pub mod canvas;
 pub mod caret;
+#[cfg(feature = "editing")]
 pub mod chart;
+#[cfg(feature = "editing")]
 pub mod citations;
 pub mod column;
+#[cfg(feature = "editing")]
 pub mod connectors;
+#[cfg(feature = "editing")]
 pub mod controls;
+#[cfg(feature = "editing")]
 pub mod design;
+#[cfg(feature = "editing")]
 pub mod draw;
 pub mod edit;
+#[cfg(feature = "math")]
 pub mod equation;
+#[cfg(feature = "editing")]
 pub mod fields;
 pub mod file;
 pub mod find_pattern;
+#[cfg(feature = "editing")]
 pub mod fmt_revisions;
 pub mod font;
+#[cfg(feature = "editing")]
 pub mod format;
+#[cfg(feature = "editing")]
 pub mod index;
+#[cfg(feature = "editing")]
 pub mod ink_shape;
+#[cfg(feature = "editing")]
 pub mod insert;
+#[cfg(feature = "editing")]
 pub mod inspector;
+#[cfg(feature = "editing")]
 pub mod lists;
+#[cfg(feature = "editing")]
 pub mod mailings;
+#[cfg(feature = "editing")]
 pub mod md_source;
+#[cfg(feature = "editing")]
 pub mod moves;
+#[cfg(feature = "editing")]
 pub mod objects;
+#[cfg(feature = "editing")]
 pub mod options;
+#[cfg(feature = "editing")]
 pub mod outline;
+#[cfg(feature = "proofing")]
 pub mod packs;
+#[cfg(feature = "editing")]
 pub mod page;
+#[cfg(feature = "editing")]
 pub mod para;
+#[cfg(feature = "editing")]
 pub mod paste;
+#[cfg(feature = "editing")]
 pub mod phonetic;
+#[cfg(feature = "editing")]
 pub mod protect;
+#[cfg(feature = "editing")]
 pub mod references;
+#[cfg(feature = "editing")]
 pub mod review;
+#[cfg(feature = "editing")]
 pub mod shape_fill;
+#[cfg(feature = "editing")]
 pub mod smart_art;
+#[cfg(feature = "editing")]
 pub mod speech;
 pub mod table;
+#[cfg(feature = "editing")]
 pub mod table_draw;
+#[cfg(feature = "editing")]
 pub mod table_formula;
 pub mod table_mouse;
 pub mod table_resize;
+#[cfg(feature = "editing")]
 pub mod table_style;
+#[cfg(feature = "editing")]
 pub mod templates;
+#[cfg(feature = "editing")]
 pub mod text;
+#[cfg(feature = "editing")]
 pub mod tools;
+#[cfg(feature = "editing")]
 pub mod user_templates;
 pub mod view;
+#[cfg(feature = "editing")]
 pub mod wordart;
 
 use serde_json::{Value, json};
+#[cfg(feature = "editing")]
 use wordcraft_doc::props::CharProps;
-use wordcraft_doc::{Pos, Revision, RevisionKind, StoryRef};
+use wordcraft_doc::{Pos, StoryRef};
+#[cfg(feature = "editing")]
+use wordcraft_doc::{Revision, RevisionKind};
 
-use crate::{CmdError, CmdResult, Registry, Session};
+#[cfg(feature = "editing")]
+use crate::CmdError;
+use crate::{CmdResult, Registry, Session};
 
 /// The full registry.
 pub fn registry() -> Registry {
     let mut v = Vec::new();
+    #[cfg(feature = "editing")]
     v.extend(text::specs());
     v.extend(caret::specs());
     v.extend(column::specs());
     v.extend(edit::specs());
+    #[cfg(feature = "editing")]
     v.extend(paste::specs());
+    #[cfg(feature = "editing")]
     v.extend(format::specs());
     v.extend(font::specs());
+    #[cfg(feature = "editing")]
     v.extend(phonetic::specs());
+    #[cfg(feature = "editing")]
     v.extend(para::specs());
+    #[cfg(feature = "editing")]
     v.extend(lists::specs());
+    #[cfg(feature = "editing")]
     v.extend(inspector::specs());
     v.extend(view::specs());
+    #[cfg(feature = "editing")]
     v.extend(md_source::specs());
+    #[cfg(feature = "editing")]
     v.extend(outline::specs());
+    #[cfg(feature = "editing")]
     v.extend(insert::specs());
+    #[cfg(feature = "math")]
     v.extend(equation::specs());
+    #[cfg(feature = "editing")]
     v.extend(page::specs());
+    #[cfg(feature = "editing")]
     v.extend(table::specs());
+    #[cfg(feature = "editing")]
     v.extend(table_style::specs());
+    #[cfg(feature = "editing")]
     v.extend(table_draw::specs());
+    #[cfg(feature = "editing")]
     v.extend(table_resize::specs());
     v.extend(table_mouse::specs());
+    #[cfg(feature = "editing")]
     v.extend(review::specs());
     v.extend(file::specs());
+    #[cfg(feature = "editing")]
     v.extend(options::specs());
+    #[cfg(feature = "proofing")]
     v.extend(packs::specs());
+    #[cfg(feature = "editing")]
     v.extend(design::specs());
+    #[cfg(feature = "editing")]
     v.extend(references::specs());
+    #[cfg(feature = "editing")]
     v.extend(fields::specs());
+    #[cfg(feature = "editing")]
     v.extend(mailings::specs());
+    #[cfg(feature = "editing")]
     v.extend(citations::specs());
+    #[cfg(feature = "editing")]
     v.extend(index::specs());
+    #[cfg(feature = "editing")]
     v.extend(objects::specs());
+    #[cfg(feature = "editing")]
     v.extend(shape_fill::specs());
+    #[cfg(feature = "editing")]
     v.extend(smart_art::specs());
+    #[cfg(feature = "editing")]
     v.extend(chart::specs());
+    #[cfg(feature = "editing")]
     v.extend(draw::specs());
+    #[cfg(feature = "editing")]
     v.extend(canvas::specs());
+    #[cfg(feature = "editing")]
     v.extend(wordart::specs());
+    #[cfg(feature = "editing")]
     v.extend(connectors::specs());
+    #[cfg(feature = "editing")]
     v.extend(tools::specs());
+    #[cfg(feature = "editing")]
     v.extend(templates::specs());
+    #[cfg(feature = "editing")]
     v.extend(user_templates::specs());
+    #[cfg(feature = "editing")]
     v.extend(protect::specs());
+    #[cfg(feature = "editing")]
     v.extend(speech::specs());
+    #[cfg(feature = "editing")]
     v.extend(controls::specs());
     Registry::new(v)
 }
@@ -156,6 +242,7 @@ pub fn selected_paths(s: &Session) -> Vec<wordcraft_doc::Path> {
 
 /// What one selection deletion actually did, for IME outcome classification.
 #[derive(Clone, Debug, Default)]
+#[cfg(feature = "editing")]
 pub(crate) struct SelectionDelete {
     pub at: Pos,
     pub content_changed: bool,
@@ -166,6 +253,7 @@ pub(crate) struct SelectionDelete {
 ///
 /// Under Track Changes an all-already-deleted range is a real no-op: no revision record is
 /// created and the effect says so.
+#[cfg(feature = "editing")]
 pub(crate) fn delete_selection_effect(s: &mut Session) -> Result<SelectionDelete, CmdError> {
     let (a, b) = s.sel.ordered();
     if a == b {
@@ -194,11 +282,13 @@ pub(crate) fn delete_selection_effect(s: &mut Session) -> Result<SelectionDelete
 /// Delete the selection (respecting track changes); returns the collapsed position. With a
 /// Drawing Canvas member picked (#2637) the selection is the whole canvas, which a command that
 /// replaces the selection (Insert › Table, Equation, Symbol, Field…) would take away: refused.
+#[cfg(feature = "editing")]
 pub fn delete_selection(s: &mut Session) -> Result<Pos, CmdError> {
     delete_selection_effect(s).map(|e| e.at)
 }
 
 /// A revision record for the current author.
+#[cfg(feature = "editing")]
 pub fn new_revision(s: &mut Session, kind: RevisionKind) -> u32 {
     let date = now_iso();
     // Never one end of a move, nor the deletion a cut may still turn into one.
@@ -219,6 +309,7 @@ pub fn new_revision(s: &mut Session, kind: RevisionKind) -> u32 {
 
 /// Whether the paragraph at `path` is followed by another paragraph in the same container (so
 /// its paragraph mark can be removed by joining the two).
+#[cfg(feature = "editing")]
 pub fn has_next_para(s: &Session, story: StoryRef, path: &wordcraft_doc::Path) -> bool {
     matches!(s.doc.block(story, &path.with_last(path.last().saturating_add(1))), Some(wordcraft_doc::Block::Para(_)))
 }
@@ -227,6 +318,7 @@ pub fn has_next_para(s: &Session, story: StoryRef, path: &wordcraft_doc::Path) -
 /// joins it. The joined paragraph keeps this paragraph's properties and ends with the next one's
 /// mark (and that mark's revisions). Returns `false`, changing nothing, when no paragraph follows
 /// in the container (a story's or cell's last mark can't be removed).
+#[cfg(feature = "editing")]
 pub fn join_next_para(s: &mut Session, story: StoryRef, path: &wordcraft_doc::Path) -> Result<bool, CmdError> {
     if !has_next_para(s, story, path) {
         return Ok(false);
@@ -244,6 +336,7 @@ pub fn join_next_para(s: &mut Session, story: StoryRef, path: &wordcraft_doc::Pa
 /// Remove the paragraph at `path` when it is empty, carries no section break and another
 /// paragraph follows in the same container: the next paragraph keeps its own properties. Returns
 /// `false`, changing nothing, otherwise.
+#[cfg(feature = "editing")]
 pub fn remove_empty_para(s: &mut Session, story: StoryRef, path: &wordcraft_doc::Path) -> Result<bool, CmdError> {
     let empty = s.doc.para(story, path).is_some_and(|p| p.is_empty() && p.section.is_none());
     if !empty || !has_next_para(s, story, path) {
@@ -255,6 +348,7 @@ pub fn remove_empty_para(s: &mut Session, story: StoryRef, path: &wordcraft_doc:
 
 /// Whether a tracked deletion of `a..b` would change anything: any non-deleted run intersects
 /// the range, or a removable/markable paragraph mark lies inside it.
+#[cfg(feature = "editing")]
 pub(crate) fn track_delete_would_change(s: &Session, a: &Pos, b: &Pos) -> bool {
     let paths = s.doc.paths_between(a, b);
     for path in &paths {
@@ -272,6 +366,7 @@ pub(crate) fn track_delete_would_change(s: &Session, a: &Pos, b: &Pos) -> bool {
 }
 
 /// What one tracked deletion did.
+#[cfg(feature = "editing")]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct TrackDeleteEffect {
     pub at: Pos,
@@ -282,6 +377,7 @@ pub(crate) struct TrackDeleteEffect {
 /// Tracked deletion: own insertions are removed, other text is marked deleted.
 ///
 /// Preflights first: an all-already-deleted range does nothing and creates no revision record.
+#[cfg(feature = "editing")]
 pub(crate) fn track_delete(s: &mut Session, a: &Pos, b: &Pos) -> Result<Pos, CmdError> {
     if !track_delete_would_change(s, a, b) {
         return Ok(a.clone());
@@ -291,6 +387,7 @@ pub(crate) fn track_delete(s: &mut Session, a: &Pos, b: &Pos) -> Result<Pos, Cmd
 }
 
 /// [`track_delete`] marking the deleted text with revision `rid`.
+#[cfg(feature = "editing")]
 pub(crate) fn track_delete_as(s: &mut Session, a: &Pos, b: &Pos, rid: u32) -> Result<TrackDeleteEffect, CmdError> {
     let author = s.author.clone();
     let mut changed = false;
@@ -341,6 +438,7 @@ pub(crate) fn track_delete_as(s: &mut Session, a: &Pos, b: &Pos, rid: u32) -> Re
 }
 
 /// What one text insertion/deletion commit changed, for IME outcome classification.
+#[cfg(feature = "editing")]
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct InsertEffect {
     pub content_changed: bool,
@@ -348,11 +446,13 @@ pub(crate) struct InsertEffect {
 }
 
 /// Insert typed text at the caret (replacing the selection), with pending formatting and track changes.
+#[cfg(feature = "editing")]
 pub fn type_text(s: &mut Session, text: &str) -> Result<(), CmdError> {
     insert_text(s, text, true, None).map(|_| ())
 }
 
 /// [`type_text`] with the effect the insertion had.
+#[cfg(feature = "editing")]
 pub(crate) fn type_text_effect(s: &mut Session, text: &str) -> Result<InsertEffect, CmdError> {
     insert_text(s, text, true, None)
 }
@@ -360,11 +460,13 @@ pub(crate) fn type_text_effect(s: &mut Session, text: &str) -> Result<InsertEffe
 /// Insert pasted plain text like [`type_text`], except that its paragraph separators are text
 /// being transferred, not Enter key presses: an empty list item between them stays (Enter on
 /// one would end the list).
+#[cfg(feature = "editing")]
 pub fn paste_text(s: &mut Session, text: &str) -> Result<(), CmdError> {
     insert_text(s, text, false, None).map(|_| ())
 }
 
 /// Insert typed text in a chosen language without losing caret formatting or tracked changes.
+#[cfg(feature = "editing")]
 pub fn type_text_with_lang(s: &mut Session, text: &str, language: Option<&str>) -> Result<(), CmdError> {
     insert_text(s, text, true, language).map(|_| ())
 }
@@ -375,6 +477,7 @@ pub fn type_text_with_lang(s: &mut Session, text: &str, language: Option<&str>) 
 /// text; a one-line control suppresses typed breaks only. It gives an otherwise undirected paragraph
 /// right-to-left direction when its first strong letter is RTL, and returns whether content or state
 /// changed.
+#[cfg(feature = "editing")]
 fn insert_text(s: &mut Session, text: &str, enter: bool, language: Option<&str>) -> Result<InsertEffect, CmdError> {
     // Formatting Backspace carried over is for typing at the place it was deleted (#6518).
     if enter {
@@ -455,6 +558,7 @@ fn insert_text(s: &mut Session, text: &str, enter: bool, language: Option<&str>)
 
 /// Is the paragraph at `at` still without letters (empty, or only spaces, digits and
 /// punctuation), with no direction set on it, its style chain or the document defaults?
+#[cfg(feature = "editing")]
 fn direction_unset(s: &Session, at: &Pos) -> bool {
     let Some(p) = s.doc.para_at(at) else { return false };
     if p.props.bidi.is_some() || p.text.chars().any(char::is_alphabetic) || s.doc.styles.default_para.bidi.is_some() {
@@ -466,6 +570,7 @@ fn direction_unset(s: &Session, at: &Pos) -> bool {
 
 /// Take a paragraph out of its list like Word does when Enter or Backspace ends a list: a
 /// "List Paragraph" goes back to Normal; any other style keeps itself with numbering switched off.
+#[cfg(feature = "editing")]
 pub fn leave_list(para: &mut wordcraft_doc::Paragraph) {
     if para.props.style.as_deref() == Some("ListParagraph") {
         para.props.style = None;
@@ -483,11 +588,13 @@ pub fn leave_list(para: &mut wordcraft_doc::Paragraph) {
 
 /// Split the paragraph at `at` like Enter does: an empty list paragraph leaves the list, the
 /// next paragraph gets the style's "next" style when Enter is at the end.
+#[cfg(feature = "editing")]
 pub fn split_para(s: &mut Session, at: &Pos) -> Result<Pos, CmdError> {
     split_para_as(s, at, true)
 }
 
 /// [`split_para`]; without `enter` an empty list item is split like any other paragraph.
+#[cfg(feature = "editing")]
 fn split_para_as(s: &mut Session, at: &Pos, enter: bool) -> Result<Pos, CmdError> {
     // `num: 0` means "explicitly not in a list", so it isn't a list item. The list may come from
     // the paragraph's style (List Number 2 in a Word file) rather than the paragraph itself.

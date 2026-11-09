@@ -95,10 +95,10 @@ const TITLE_FIT_GAP: f32 = 16.0;
 
 /// AutoSave and the Quick Access Toolbar, at the start of the bar; returns the rect they took.
 fn leading(app: &mut WordApp, ui: &mut Ui) -> Option<egui::Rect> {
-    let switch = autosave(app, ui);
+    let switch = app.show_autosave.then(|| autosave(app, ui));
     // Hidden (#1945): neither the buttons nor the … menu; the title centres as before.
     let toolbar = if app.ui.quick_access_toolbar { quick_access(app, ui) } else { None };
-    super::union([Some(switch), toolbar].into_iter().flatten())
+    super::union([switch, toolbar].into_iter().flatten())
 }
 
 /// The AutoSave switch: off and with the reason as its tooltip when AutoSave can't cover the document (#196,
